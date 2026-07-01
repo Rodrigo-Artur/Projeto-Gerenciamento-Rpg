@@ -7,7 +7,7 @@ import {
   initialPlayerSheets,
   initialRuleArticles,
 } from "@/data/systemRules";
-import type { NpcSheet, PlayerSheet, RuleArticle, RulebookData } from "@/types/rulebook";
+import type { NpcSheet, PlayerSheet, RuleArticle, RulebookData, SheetCategory } from "@/types/rulebook";
 
 type RuleRow = {
   id: string;
@@ -20,6 +20,7 @@ type RuleRow = {
 
 type NpcRow = {
   id: string;
+  category: SheetCategory | null;
   name: string;
   role: string;
   description: string;
@@ -67,6 +68,7 @@ function getDatabase() {
     globalThis.mesaDoMestreDatabase.pragma("journal_mode = WAL");
     globalThis.mesaDoMestreDatabase.pragma("foreign_keys = ON");
     createSchema(globalThis.mesaDoMestreDatabase);
+    runMigrations(globalThis.mesaDoMestreDatabase);
     seedInitialData(globalThis.mesaDoMestreDatabase);
   }
 
@@ -88,6 +90,7 @@ function createSchema(db: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS npc_sheets (
       id TEXT PRIMARY KEY,
+      category TEXT NOT NULL DEFAULT 'criminosos',
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -113,6 +116,18 @@ function createSchema(db: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+}
+
+function runMigrations(db: Database.Database) {
+  const npcColumns = db.prepare("PRAGMA table_info(npc_sheets)").all() as {
+    name: string;
+  }[];
+
+  const hasNpcCategory = npcColumns.some((column) => column.name === "category");
+
+  if (!hasNpcCategory) {
+    db.exec("ALTER TABLE npc_sheets ADD COLUMN category TEXT NOT NULL DEFAULT 'criminosos'");
+  }
 }
 
 function seedInitialData(db: Database.Database) {
@@ -195,33 +210,26 @@ function seedInitialData(db: Database.Database) {
     insertPlayers(initialPlayerSheets);
   }
 
-  if (initialNpcSheets.length > 0) {
-    const existingNpcs = db.prepare("SELECT COUNT(*) AS total FROM npc_sheets").get() as {
-      total: number;
-    };
+  const insertNpc = db.prepare(`
+    INSERT OR IGNORE INTO npc_sheets (id, category, name, role, description, stats_json, notes_json)
+    VALUES (@id, @category, @name, @role, @description, @statsJson, @notesJson)
+  `);
 
-    if (existingNpcs.total === 0) {
-      const insertNpc = db.prepare(`
-        INSERT INTO npc_sheets (id, name, role, description, stats_json, notes_json)
-        VALUES (@id, @name, @role, @description, @statsJson, @notesJson)
-      `);
-
-      const insertNpcs = db.transaction((npcs: NpcSheet[]) => {
-        for (const npc of npcs) {
-          insertNpc.run({
-            id: npc.id,
-            name: npc.name,
-            role: npc.role,
-            description: npc.description,
-            statsJson: JSON.stringify(npc.stats),
-            notesJson: JSON.stringify(npc.notes),
-          });
-        }
+  const insertNpcs = db.transaction((npcs: NpcSheet[]) => {
+    for (const npc of npcs) {
+      insertNpc.run({
+        id: npc.id,
+        category: npc.category,
+        name: npc.name,
+        role: npc.role,
+        description: npc.description,
+        statsJson: JSON.stringify(npc.stats),
+        notesJson: JSON.stringify(npc.notes),
       });
-
-      insertNpcs(initialNpcSheets);
     }
-  }
+  });
+
+  insertNpcs(initialNpcSheets);
 }
 
 export function getLocalDatabasePath() {
@@ -234,7 +242,7 @@ export function getRulebookData(): RulebookData {
     .prepare("SELECT id, category, title, summary, content, tags_json FROM rule_articles ORDER BY rowid ASC")
     .all() as RuleRow[];
   const npcRows = db
-    .prepare("SELECT id, name, role, description, stats_json, notes_json FROM npc_sheets ORDER BY rowid ASC")
+    .prepare("SELECT id, category, name, role, description, stats_json, notes_json FROM npc_sheets ORDER BY category ASC, rowid ASC")
     .all() as NpcRow[];
   const playerRows = db
     .prepare(`
@@ -266,6 +274,7 @@ export function getRulebookData(): RulebookData {
     })),
     npcs: npcRows.map((row) => ({
       id: row.id,
+      category: row.category ?? "criminosos",
       name: row.name,
       role: row.role,
       description: row.description,
@@ -304,9 +313,10 @@ export function saveRulebookData(data: RulebookData) {
   `);
 
   const saveNpc = db.prepare(`
-    INSERT INTO npc_sheets (id, name, role, description, stats_json, notes_json, updated_at)
-    VALUES (@id, @name, @role, @description, @statsJson, @notesJson, CURRENT_TIMESTAMP)
+    INSERT INTO npc_sheets (id, category, name, role, description, stats_json, notes_json, updated_at)
+    VALUES (@id, @category, @name, @role, @description, @statsJson, @notesJson, CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET
+      category = excluded.category,
       name = excluded.name,
       role = excluded.role,
       description = excluded.description,
@@ -372,6 +382,7 @@ export function saveRulebookData(data: RulebookData) {
     for (const npc of rulebook.npcs) {
       saveNpc.run({
         id: npc.id,
+        category: npc.category,
         name: npc.name,
         role: npc.role,
         description: npc.description,
