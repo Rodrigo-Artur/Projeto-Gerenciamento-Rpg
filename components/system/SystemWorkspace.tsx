@@ -2,6 +2,7 @@
 
 import {
   BookOpen,
+  Database,
   Edit3,
   FileText,
   Home,
@@ -14,16 +15,24 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { CSSProperties, ElementType, PointerEvent } from "react";
+import type { ElementType, PointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { initialNpcSheets, initialRuleArticles } from "@/data/systemRules";
-import type { NpcSheet, OpenPanel, RuleArticle, RuleCategory } from "@/types/rulebook";
-
-type StoredRulebook = {
-  rules: RuleArticle[];
-  npcs: NpcSheet[];
-};
+import {
+  initialNpcSheets,
+  initialPlayerSheets,
+  initialRuleArticles,
+} from "@/data/systemRules";
+import type {
+  LabeledValue,
+  NpcSheet,
+  OpenPanel,
+  PlayerAbility,
+  PlayerSheet,
+  RuleArticle,
+  RuleCategory,
+  RulebookData,
+} from "@/types/rulebook";
 
 type MenuItem = {
   id: RuleCategory;
@@ -32,51 +41,68 @@ type MenuItem = {
   icon: ElementType;
 };
 
-const STORAGE_KEY = "mesa-do-mestre:rulebook:v1";
 const PANEL_MIN_WIDTH = 320;
 const MAX_OPEN_PANELS = 4;
+
+const initialData: RulebookData = {
+  rules: initialRuleArticles,
+  npcs: initialNpcSheets,
+  players: initialPlayerSheets,
+};
 
 const menuItems: MenuItem[] = [
   {
     id: "combate",
     label: "Combate",
-    description: "Rodadas, ações e resolução de ataques",
+    description: "Rodadas, iniciativa e turno",
     icon: Swords,
   },
   {
     id: "testes",
     label: "Testes",
-    description: "Atributos, perícias e dificuldades",
+    description: "D20, dificuldade, vantagem e crítico",
     icon: ScrollText,
   },
   {
-    id: "condicoes",
-    label: "Condições",
-    description: "Estados, efeitos e duração",
+    id: "atributos",
+    label: "Atributos",
+    description: "Escala e usos dos atributos",
+    icon: ShieldAlert,
+  },
+  {
+    id: "defesa-dano",
+    label: "Defesa e Dano",
+    description: "Ataques, redução e contrajogo",
     icon: ShieldAlert,
   },
   {
     id: "personagem",
     label: "Personagem",
-    description: "Criação e evolução de fichas",
+    description: "Criação e raças jogáveis",
     icon: UserRound,
   },
   {
-    id: "equipamentos",
-    label: "Equipamentos",
-    description: "Itens, inventário e recompensas",
-    icon: FileText,
+    id: "progressao",
+    label: "Progressão",
+    description: "Evolução por raça e recursos",
+    icon: BookOpen,
   },
   {
-    id: "magias",
-    label: "Magias / Poderes",
-    description: "Custos, efeitos e limitações",
+    id: "habilidades",
+    label: "Habilidades",
+    description: "Escalas, custos e balanceamento",
     icon: WandSparkles,
+  },
+  {
+    id: "armaduras",
+    label: "Armaduras",
+    description: "Armaduras Kaiju e módulos",
+    icon: FileText,
   },
   {
     id: "regras-da-casa",
     label: "Regras da Casa",
-    description: "Ajustes próprios da mesa",
+    description: "Decisões próprias da mesa",
     icon: BookOpen,
   },
 ];
@@ -96,64 +122,147 @@ function splitTextIntoList(value: string) {
     .filter(Boolean);
 }
 
-function listToEditableText(values: string[]) {
-  return values.join("\n");
+function labeledValuesToText(values: LabeledValue[]) {
+  return values.map((item) => `${item.label}: ${item.value}`).join("\n");
+}
+
+function parseLabeledValues(value: string): LabeledValue[] {
+  return splitTextIntoList(value).map((line) => {
+    const [label, ...valueParts] = line.split(":");
+
+    return {
+      label: label?.trim() || "Campo",
+      value: valueParts.join(":").trim() || "-",
+    };
+  });
+}
+
+function abilitiesToText(abilities: PlayerAbility[]) {
+  return abilities
+    .map((ability) =>
+      [
+        ability.name,
+        ability.type,
+        ability.scale,
+        ability.cost,
+        ability.test,
+        ability.effect,
+        ability.limit ?? "",
+      ].join(" | ")
+    )
+    .join("\n");
+}
+
+function parseAbilities(value: string): PlayerAbility[] {
+  return splitTextIntoList(value).map((line) => {
+    const [name, type, scale, cost, test, effect, limit] = line
+      .split("|")
+      .map((part) => part.trim());
+
+    return {
+      name: name || "Habilidade",
+      type: type || "—",
+      scale: scale || "—",
+      cost: cost || "—",
+      test: test || "—",
+      effect: effect || "—",
+      limit: limit || undefined,
+    };
+  });
 }
 
 export function SystemWorkspace() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
-  const [rules, setRules] = useState<RuleArticle[]>(initialRuleArticles);
-  const [npcs, setNpcs] = useState<NpcSheet[]>(initialNpcSheets);
-  const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
+  const [rulebookData, setRulebookData] = useState<RulebookData>(initialData);
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState("Carregando banco local...");
   const [openPanels, setOpenPanels] = useState<OpenPanel[]>([
     {
-      id: "rule:combate",
+      id: "rule:combate-rodadas",
       type: "rule",
-      refId: "combate",
-      title: "Como funciona o combate",
+      refId: "combate-rodadas",
+      title: "Combate: rodadas, iniciativa e turno",
     },
   ]);
   const [panelSizes, setPanelSizes] = useState<number[]>([100]);
 
   useEffect(() => {
-    const rawData = window.localStorage.getItem(STORAGE_KEY);
+    let isMounted = true;
 
-    if (rawData) {
+    async function loadDatabase() {
       try {
-        const parsedData = JSON.parse(rawData) as StoredRulebook;
+        const response = await fetch("/api/rulebook", {
+          cache: "no-store",
+        });
 
-        if (Array.isArray(parsedData.rules)) {
-          setRules(parsedData.rules);
+        if (!response.ok) {
+          throw new Error("Falha ao carregar o banco local.");
         }
 
-        if (Array.isArray(parsedData.npcs)) {
-          setNpcs(parsedData.npcs);
+        const data = (await response.json()) as RulebookData;
+
+        if (isMounted) {
+          setRulebookData({
+            rules: data.rules ?? [],
+            npcs: data.npcs ?? [],
+            players: data.players ?? [],
+          });
+          setSaveStatus("Banco local conectado");
         }
       } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+        if (isMounted) {
+          setSaveStatus("Usando dados iniciais; verifique o servidor/API local");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
-    setHasLoadedStorage(true);
+    loadDatabase();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  useEffect(() => {
-    if (!hasLoadedStorage) {
-      return;
+  const openedPanelIds = useMemo(
+    () => new Set(openPanels.map((panel) => panel.id)),
+    [openPanels]
+  );
+
+  async function persistData(nextData: RulebookData) {
+    setRulebookData(nextData);
+    setSaveStatus("Salvando no SQLite local...");
+
+    try {
+      const response = await fetch("/api/rulebook", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(nextData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Não foi possível salvar no banco local.");
+      }
+
+      const savedData = (await response.json()) as RulebookData;
+      setRulebookData({
+        rules: savedData.rules ?? nextData.rules,
+        npcs: savedData.npcs ?? nextData.npcs,
+        players: savedData.players ?? nextData.players,
+      });
+      setSaveStatus("Salvo no banco local");
+    } catch {
+      setSaveStatus("Erro ao salvar no banco local");
     }
-
-    const dataToStore: StoredRulebook = {
-      rules,
-      npcs,
-    };
-
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
-  }, [hasLoadedStorage, rules, npcs]);
-
-  const openedPanelIds = useMemo(() => new Set(openPanels.map((panel) => panel.id)), [openPanels]);
+  }
 
   function openRuleByCategory(category: RuleCategory) {
-    const article = rules.find((item) => item.category === category);
+    const article = rulebookData.rules.find((item) => item.category === category);
 
     if (!article) {
       return;
@@ -163,7 +272,7 @@ export function SystemWorkspace() {
   }
 
   function openRule(articleId: string) {
-    const article = rules.find((item) => item.id === articleId);
+    const article = rulebookData.rules.find((item) => item.id === articleId);
 
     if (!article) {
       return;
@@ -177,8 +286,23 @@ export function SystemWorkspace() {
     });
   }
 
+  function openPlayer(playerId: string) {
+    const player = rulebookData.players.find((item) => item.id === playerId);
+
+    if (!player) {
+      return;
+    }
+
+    addPanel({
+      id: `player:${player.id}`,
+      type: "player",
+      refId: player.id,
+      title: player.characterName,
+    });
+  }
+
   function openNpc(npcId: string) {
-    const npc = npcs.find((item) => item.id === npcId);
+    const npc = rulebookData.npcs.find((item) => item.id === npcId);
 
     if (!npc) {
       return;
@@ -217,9 +341,12 @@ export function SystemWorkspace() {
   }
 
   function updateRule(updatedRule: RuleArticle) {
-    setRules((currentRules) =>
-      currentRules.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule))
-    );
+    const nextData = {
+      ...rulebookData,
+      rules: rulebookData.rules.map((rule) =>
+        rule.id === updatedRule.id ? updatedRule : rule
+      ),
+    };
 
     setOpenPanels((currentPanels) =>
       currentPanels.map((panel) =>
@@ -228,12 +355,17 @@ export function SystemWorkspace() {
           : panel
       )
     );
+
+    persistData(nextData);
   }
 
   function updateNpc(updatedNpc: NpcSheet) {
-    setNpcs((currentNpcs) =>
-      currentNpcs.map((npc) => (npc.id === updatedNpc.id ? updatedNpc : npc))
-    );
+    const nextData = {
+      ...rulebookData,
+      npcs: rulebookData.npcs.map((npc) =>
+        npc.id === updatedNpc.id ? updatedNpc : npc
+      ),
+    };
 
     setOpenPanels((currentPanels) =>
       currentPanels.map((panel) =>
@@ -242,20 +374,72 @@ export function SystemWorkspace() {
           : panel
       )
     );
+
+    persistData(nextData);
   }
 
-  function resetAllContent() {
+  function updatePlayer(updatedPlayer: PlayerSheet) {
+    const nextData = {
+      ...rulebookData,
+      players: rulebookData.players.map((player) =>
+        player.id === updatedPlayer.id ? updatedPlayer : player
+      ),
+    };
+
+    setOpenPanels((currentPanels) =>
+      currentPanels.map((panel) =>
+        panel.type === "player" && panel.refId === updatedPlayer.id
+          ? { ...panel, title: updatedPlayer.characterName }
+          : panel
+      )
+    );
+
+    persistData(nextData);
+  }
+
+  async function resetAllContent() {
     const confirmed = window.confirm(
-      "Deseja restaurar o conteúdo inicial? Suas edições salvas neste navegador serão perdidas."
+      "Deseja restaurar os inserts iniciais do Kaiju RPG? Suas edições atuais no banco local serão substituídas."
     );
 
     if (!confirmed) {
       return;
     }
 
-    setRules(initialRuleArticles);
-    setNpcs(initialNpcSheets);
-    window.localStorage.removeItem(STORAGE_KEY);
+    setSaveStatus("Restaurando inserts iniciais...");
+
+    try {
+      const response = await fetch("/api/rulebook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "reset-seed" }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao restaurar seed.");
+      }
+
+      const data = (await response.json()) as RulebookData;
+      setRulebookData({
+        rules: data.rules ?? [],
+        npcs: data.npcs ?? [],
+        players: data.players ?? [],
+      });
+      setOpenPanels([
+        {
+          id: "rule:combate-rodadas",
+          type: "rule",
+          refId: "combate-rodadas",
+          title: "Combate: rodadas, iniciativa e turno",
+        },
+      ]);
+      setPanelSizes([100]);
+      setSaveStatus("Inserts iniciais restaurados");
+    } catch {
+      setSaveStatus("Erro ao restaurar inserts iniciais");
+    }
   }
 
   function startResize(event: PointerEvent<HTMLDivElement>, dividerIndex: number) {
@@ -315,25 +499,26 @@ export function SystemWorkspace() {
         <div>
           <h1 className="text-xl font-bold text-amber-400">Mesa do Mestre</h1>
           <p className="text-xs text-zinc-500">
-            Biblioteca editável do sistema, regras e fichas rápidas
+            Biblioteca editável do Kaiju RPG com banco SQLite local
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="rounded-full border border-amber-500/40 px-3 py-1 text-xs font-medium text-amber-300">
-            Sistema próprio
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-300">
+            <Database className="h-3.5 w-3.5" />
+            {isLoading ? "Carregando..." : saveStatus}
           </span>
           <button
             onClick={resetAllContent}
             className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-red-500/60 hover:text-red-300"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar
+            Restaurar inserts
           </button>
         </div>
       </header>
 
-      <div className="grid h-[calc(100vh-4rem)] grid-cols-[300px_1fr]">
+      <div className="grid h-[calc(100vh-4rem)] grid-cols-[320px_1fr]">
         <aside className="border-r border-zinc-800 bg-zinc-900/70 p-4">
           <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
             <Home className="h-4 w-4 text-amber-400" />
@@ -343,7 +528,7 @@ export function SystemWorkspace() {
           <nav className="space-y-2">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const article = rules.find((rule) => rule.category === item.id);
+              const article = rulebookData.rules.find((rule) => rule.category === item.id);
               const isOpen = article ? openedPanelIds.has(`rule:${article.id}`) : false;
 
               return (
@@ -368,33 +553,52 @@ export function SystemWorkspace() {
 
           <div className="mt-8">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Fichas rápidas de NPC
+              Fichas de players
             </p>
 
-            {npcs.map((npc) => {
-              const isOpen = openedPanelIds.has(`npc:${npc.id}`);
+            {rulebookData.players.map((player) => {
+              const isOpen = openedPanelIds.has(`player:${player.id}`);
 
               return (
                 <button
-                  key={npc.id}
-                  onClick={() => openNpc(npc.id)}
+                  key={player.id}
+                  onClick={() => openPlayer(player.id)}
                   className={`mb-2 w-full rounded-md border p-3 text-left text-sm transition ${
                     isOpen
                       ? "border-amber-500/50 bg-amber-500/10"
                       : "border-zinc-800 bg-zinc-950 hover:border-amber-500/40"
                   }`}
                 >
-                  <p className="font-medium text-zinc-200">{npc.name}</p>
-                  <p className="text-xs text-zinc-500">{npc.role}</p>
+                  <p className="font-medium text-zinc-200">{player.characterName}</p>
+                  <p className="text-xs text-zinc-500">{player.role}</p>
                 </button>
               );
             })}
           </div>
 
+          {rulebookData.npcs.length > 0 && (
+            <div className="mt-8">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Fichas rápidas de NPC
+              </p>
+
+              {rulebookData.npcs.map((npc) => (
+                <button
+                  key={npc.id}
+                  onClick={() => openNpc(npc.id)}
+                  className="mb-2 w-full rounded-md border border-zinc-800 bg-zinc-950 p-3 text-left text-sm transition hover:border-amber-500/40"
+                >
+                  <p className="font-medium text-zinc-200">{npc.name}</p>
+                  <p className="text-xs text-zinc-500">{npc.role}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
             <p className="font-semibold text-amber-300">Como usar</p>
             <p className="mt-1">
-              Abra uma regra e uma ficha de NPC ao mesmo tempo. Arraste o divisor entre as telas para ajustar o tamanho.
+              Abra uma regra e a ficha de Erick ao mesmo tempo. Arraste o divisor para ajustar o tamanho e use Editar para salvar no banco local.
             </p>
           </div>
         </aside>
@@ -414,13 +618,15 @@ export function SystemWorkspace() {
                 >
                   <WorkspacePanel
                     panel={panel}
-                    rules={rules}
-                    npcs={npcs}
+                    rules={rulebookData.rules}
+                    npcs={rulebookData.npcs}
+                    players={rulebookData.players}
                     canClose={openPanels.length > 1}
                     onClose={() => closePanel(panel.id)}
                     onOpenRule={openRule}
                     onUpdateRule={updateRule}
                     onUpdateNpc={updateNpc}
+                    onUpdatePlayer={updatePlayer}
                   />
                 </div>
 
@@ -445,20 +651,24 @@ function WorkspacePanel({
   panel,
   rules,
   npcs,
+  players,
   canClose,
   onClose,
   onOpenRule,
   onUpdateRule,
   onUpdateNpc,
+  onUpdatePlayer,
 }: {
   panel: OpenPanel;
   rules: RuleArticle[];
   npcs: NpcSheet[];
+  players: PlayerSheet[];
   canClose: boolean;
   onClose: () => void;
   onOpenRule: (articleId: string) => void;
   onUpdateRule: (rule: RuleArticle) => void;
   onUpdateNpc: (npc: NpcSheet) => void;
+  onUpdatePlayer: (player: PlayerSheet) => void;
 }) {
   if (panel.type === "rule") {
     const article = rules.find((item) => item.id === panel.refId);
@@ -475,6 +685,23 @@ function WorkspacePanel({
         onClose={onClose}
         onOpenRule={onOpenRule}
         onUpdateRule={onUpdateRule}
+      />
+    );
+  }
+
+  if (panel.type === "player") {
+    const player = players.find((item) => item.id === panel.refId);
+
+    if (!player) {
+      return null;
+    }
+
+    return (
+      <PlayerPanel
+        player={player}
+        canClose={canClose}
+        onClose={onClose}
+        onUpdatePlayer={onUpdatePlayer}
       />
     );
   }
@@ -623,49 +850,55 @@ function RulePanel({
   );
 }
 
-function NpcPanel({
-  npc,
+function PlayerPanel({
+  player,
   canClose,
   onClose,
-  onUpdateNpc,
+  onUpdatePlayer,
 }: {
-  npc: NpcSheet;
+  player: PlayerSheet;
   canClose: boolean;
   onClose: () => void;
-  onUpdateNpc: (npc: NpcSheet) => void;
+  onUpdatePlayer: (player: PlayerSheet) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [draftName, setDraftName] = useState(npc.name);
-  const [draftRole, setDraftRole] = useState(npc.role);
-  const [draftDescription, setDraftDescription] = useState(npc.description);
-  const [draftStats, setDraftStats] = useState(npc.stats.map((stat) => `${stat.label}: ${stat.value}`).join("\n"));
-  const [draftNotes, setDraftNotes] = useState(listToEditableText(npc.notes));
+  const [draftName, setDraftName] = useState(player.characterName);
+  const [draftPlayerName, setDraftPlayerName] = useState(player.playerName);
+  const [draftRole, setDraftRole] = useState(player.role);
+  const [draftTier, setDraftTier] = useState(player.tier);
+  const [draftConcept, setDraftConcept] = useState(player.concept);
+  const [draftStatus, setDraftStatus] = useState(labeledValuesToText(player.status));
+  const [draftAttributes, setDraftAttributes] = useState(labeledValuesToText(player.attributes));
+  const [draftResources, setDraftResources] = useState(labeledValuesToText(player.resources));
+  const [draftAbilities, setDraftAbilities] = useState(abilitiesToText(player.abilities));
+  const [draftNotes, setDraftNotes] = useState(player.notes.join("\n"));
 
   useEffect(() => {
-    setDraftName(npc.name);
-    setDraftRole(npc.role);
-    setDraftDescription(npc.description);
-    setDraftStats(npc.stats.map((stat) => `${stat.label}: ${stat.value}`).join("\n"));
-    setDraftNotes(listToEditableText(npc.notes));
+    setDraftName(player.characterName);
+    setDraftPlayerName(player.playerName);
+    setDraftRole(player.role);
+    setDraftTier(player.tier);
+    setDraftConcept(player.concept);
+    setDraftStatus(labeledValuesToText(player.status));
+    setDraftAttributes(labeledValuesToText(player.attributes));
+    setDraftResources(labeledValuesToText(player.resources));
+    setDraftAbilities(abilitiesToText(player.abilities));
+    setDraftNotes(player.notes.join("\n"));
     setIsEditing(false);
-  }, [npc]);
+  }, [player]);
 
   function saveChanges() {
-    const parsedStats = splitTextIntoList(draftStats).map((line) => {
-      const [label, ...valueParts] = line.split(":");
-
-      return {
-        label: label?.trim() || "Campo",
-        value: valueParts.join(":").trim() || "-",
-      };
-    });
-
-    onUpdateNpc({
-      ...npc,
-      name: draftName.trim() || npc.name,
+    onUpdatePlayer({
+      ...player,
+      characterName: draftName.trim() || player.characterName,
+      playerName: draftPlayerName.trim() || player.playerName,
       role: draftRole.trim(),
-      description: draftDescription.trim(),
-      stats: parsedStats,
+      tier: draftTier.trim(),
+      concept: draftConcept.trim(),
+      status: parseLabeledValues(draftStatus),
+      attributes: parseLabeledValues(draftAttributes),
+      resources: parseLabeledValues(draftResources),
+      abilities: parseAbilities(draftAbilities),
       notes: splitTextIntoList(draftNotes),
     });
 
@@ -684,7 +917,7 @@ function NpcPanel({
                 className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg font-semibold text-amber-300 outline-none focus:border-amber-500"
               />
             ) : (
-              <h2 className="truncate text-lg font-semibold text-amber-300">{npc.name}</h2>
+              <h2 className="truncate text-lg font-semibold text-amber-300">{player.characterName}</h2>
             )}
 
             {isEditing ? (
@@ -694,7 +927,7 @@ function NpcPanel({
                 className="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-amber-500"
               />
             ) : (
-              <p className="mt-1 text-sm text-zinc-400">{npc.role}</p>
+              <p className="mt-1 text-sm text-zinc-400">{player.role}</p>
             )}
           </div>
 
@@ -712,61 +945,200 @@ function NpcPanel({
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {isEditing ? (
           <div className="space-y-4">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Descrição
-              <textarea
-                value={draftDescription}
-                onChange={(event) => setDraftDescription(event.target.value)}
-                rows={5}
-                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500"
-              />
-            </label>
-
-            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Status, um por linha no formato Nome: Valor
-              <textarea
-                value={draftStats}
-                onChange={(event) => setDraftStats(event.target.value)}
-                rows={6}
-                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500"
-              />
-            </label>
-
-            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Notas do mestre, uma por linha
-              <textarea
-                value={draftNotes}
-                onChange={(event) => setDraftNotes(event.target.value)}
-                rows={6}
-                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500"
-              />
-            </label>
+            <EditableInput label="Nome do jogador" value={draftPlayerName} onChange={setDraftPlayerName} />
+            <EditableInput label="Tier" value={draftTier} onChange={setDraftTier} />
+            <EditableTextarea label="Conceito" value={draftConcept} onChange={setDraftConcept} rows={5} />
+            <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStatus} onChange={setDraftStatus} rows={8} />
+            <EditableTextarea label="Atributos, um por linha no formato Nome: Valor" value={draftAttributes} onChange={setDraftAttributes} rows={8} />
+            <EditableTextarea label="Recursos, um por linha no formato Nome: Valor" value={draftResources} onChange={setDraftResources} rows={7} />
+            <EditableTextarea
+              label="Habilidades, uma por linha no formato Nome | Tipo | Escala | Custo | Teste | Efeito | Limite"
+              value={draftAbilities}
+              onChange={setDraftAbilities}
+              rows={12}
+            />
+            <EditableTextarea label="Notas do mestre, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={7} />
           </div>
         ) : (
-          <>
-            <p className="mb-5 text-sm leading-7 text-zinc-300">{npc.description}</p>
-
-            <div className="grid grid-cols-2 gap-3">
-              {npc.stats.map((stat) => (
-                <div key={stat.label} className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
-                  <p className="text-xs uppercase text-zinc-500">{stat.label}</p>
-                  <p className="text-lg font-semibold text-zinc-100">{stat.value}</p>
-                </div>
-              ))}
+          <div className="space-y-6">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Player</p>
+              <p className="text-sm text-zinc-300">{player.playerName}</p>
+              <p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">Tier</p>
+              <p className="text-sm text-zinc-300">{player.tier}</p>
             </div>
 
-            <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-950 p-4">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+              <p className="mb-2 text-sm font-semibold text-amber-300">Conceito</p>
+              <p className="text-sm leading-7 text-zinc-300">{player.concept}</p>
+            </div>
+
+            <LabeledGrid title="Status" items={player.status} />
+            <LabeledGrid title="Atributos" items={player.attributes} />
+            <LabeledGrid title="Recursos do mestre" items={player.resources} />
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+              <p className="mb-3 text-sm font-semibold text-amber-300">Habilidades</p>
+              <div className="space-y-4">
+                {player.abilities.map((ability) => (
+                  <div key={ability.name} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-zinc-100">{ability.name}</p>
+                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{ability.type}</span>
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">{ability.scale}</span>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">Custo: {ability.cost}</p>
+                    <p className="text-xs text-zinc-500">Teste: {ability.test}</p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-300">{ability.effect}</p>
+                    {ability.limit && <p className="mt-2 text-xs leading-5 text-red-300/80">Limite: {ability.limit}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
               <p className="mb-3 text-sm font-semibold text-amber-300">Notas do mestre</p>
               <ul className="space-y-2 text-sm text-zinc-300">
-                {npc.notes.map((note) => (
+                {player.notes.map((note) => (
                   <li key={note}>• {note}</li>
                 ))}
               </ul>
             </div>
-          </>
+          </div>
         )}
       </div>
     </article>
+  );
+}
+
+function NpcPanel({
+  npc,
+  canClose,
+  onClose,
+  onUpdateNpc,
+}: {
+  npc: NpcSheet;
+  canClose: boolean;
+  onClose: () => void;
+  onUpdateNpc: (npc: NpcSheet) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftName, setDraftName] = useState(npc.name);
+  const [draftRole, setDraftRole] = useState(npc.role);
+  const [draftDescription, setDraftDescription] = useState(npc.description);
+  const [draftStats, setDraftStats] = useState(labeledValuesToText(npc.stats));
+  const [draftNotes, setDraftNotes] = useState(npc.notes.join("\n"));
+
+  function saveChanges() {
+    onUpdateNpc({
+      ...npc,
+      name: draftName.trim() || npc.name,
+      role: draftRole.trim(),
+      description: draftDescription.trim(),
+      stats: parseLabeledValues(draftStats),
+      notes: splitTextIntoList(draftNotes),
+    });
+
+    setIsEditing(false);
+  }
+
+  return (
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100">
+      <header className="border-b border-zinc-800 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold text-amber-300">{npc.name}</h2>
+            <p className="mt-1 text-sm text-zinc-400">{npc.role}</p>
+          </div>
+          <PanelActions
+            isEditing={isEditing}
+            canClose={canClose}
+            onEdit={() => setIsEditing(true)}
+            onSave={saveChanges}
+            onCancel={() => setIsEditing(false)}
+            onClose={onClose}
+          />
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {isEditing ? (
+          <div className="space-y-4">
+            <EditableInput label="Nome" value={draftName} onChange={setDraftName} />
+            <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
+            <EditableTextarea label="Descrição" value={draftDescription} onChange={setDraftDescription} rows={5} />
+            <EditableTextarea label="Status" value={draftStats} onChange={setDraftStats} rows={6} />
+            <EditableTextarea label="Notas" value={draftNotes} onChange={setDraftNotes} rows={6} />
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <p className="text-sm leading-7 text-zinc-300">{npc.description}</p>
+            <LabeledGrid title="Status" items={npc.stats} />
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function LabeledGrid({ title, items }: { title: string; items: LabeledValue[] }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+      <p className="mb-3 text-sm font-semibold text-amber-300">{title}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}`} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
+            <p className="text-xs uppercase text-zinc-500">{item.label}</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-100">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EditableInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      {label}
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm normal-case text-zinc-200 outline-none focus:border-amber-500"
+      />
+    </label>
+  );
+}
+
+function EditableTextarea({
+  label,
+  value,
+  onChange,
+  rows,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows: number;
+}) {
+  return (
+    <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={rows}
+        className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500"
+      />
+    </label>
   );
 }
 
@@ -823,11 +1195,4 @@ function PanelActions({
       </button>
     </div>
   );
-}
-
-export function panelStyle(size: number): CSSProperties {
-  return {
-    flexBasis: `${size}%`,
-    minWidth: PANEL_MIN_WIDTH,
-  };
 }
