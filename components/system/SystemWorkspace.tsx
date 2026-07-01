@@ -16,7 +16,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { ElementType, PointerEvent } from "react";
+import type { ElementType, PointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -818,7 +818,7 @@ function SheetGroup({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section>
