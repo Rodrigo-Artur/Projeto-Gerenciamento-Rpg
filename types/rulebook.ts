@@ -11,6 +11,13 @@ export type RuleCategory =
   | "npcs"
   | "regras-da-casa";
 
+export type SheetCategory =
+  | "players"
+  | "criminosos"
+  | "policia-umck"
+  | "ameacas-pesadas"
+  | "simbiontes";
+
 export type RuleArticle = {
   id: string;
   category: RuleCategory;
@@ -27,6 +34,7 @@ export type LabeledValue = {
 
 export type NpcSheet = {
   id: string;
+  category: SheetCategory;
   name: string;
   role: string;
   description: string;
