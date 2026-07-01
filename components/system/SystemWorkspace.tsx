@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Swords,
   UserRound,
+  Users,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -32,13 +33,22 @@ import type {
   RuleArticle,
   RuleCategory,
   RulebookData,
+  SheetCategory,
 } from "@/types/rulebook";
+
+type WorkspaceTab = "system" | "sheets";
 
 type MenuItem = {
   id: RuleCategory;
   label: string;
   description: string;
   icon: ElementType;
+};
+
+type SheetCategoryItem = {
+  id: SheetCategory;
+  label: string;
+  description: string;
 };
 
 const PANEL_MIN_WIDTH = 320;
@@ -104,6 +114,34 @@ const menuItems: MenuItem[] = [
     label: "Regras da Casa",
     description: "Decisões próprias da mesa",
     icon: BookOpen,
+  },
+];
+
+const sheetCategories: SheetCategoryItem[] = [
+  {
+    id: "players",
+    label: "Players",
+    description: "Fichas dos jogadores",
+  },
+  {
+    id: "criminosos",
+    label: "Criminosos",
+    description: "NPCs presos e inimigos simples",
+  },
+  {
+    id: "policia-umck",
+    label: "Polícia / UMCK",
+    description: "Guardas, oficiais e agentes",
+  },
+  {
+    id: "ameacas-pesadas",
+    label: "Ameaças Pesadas",
+    description: "Tanks, armaduras e mini-bosses",
+  },
+  {
+    id: "simbiontes",
+    label: "Simbiontes",
+    description: "Organismos simbiontes e boss",
   },
 ];
 
@@ -173,10 +211,11 @@ function parseAbilities(value: string): PlayerAbility[] {
 
 export function SystemWorkspace() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("system");
   const [rulebookData, setRulebookData] = useState<RulebookData>(initialData);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState("Carregando banco local...");
-  const [openPanels, setOpenPanels] = useState<OpenPanel[]>([
+  const [systemPanels, setSystemPanels] = useState<OpenPanel[]>([
     {
       id: "rule:combate-rodadas",
       type: "rule",
@@ -184,7 +223,21 @@ export function SystemWorkspace() {
       title: "Combate: rodadas, iniciativa e turno",
     },
   ]);
-  const [panelSizes, setPanelSizes] = useState<number[]>([100]);
+  const [sheetPanels, setSheetPanels] = useState<OpenPanel[]>([
+    {
+      id: "player:erick-medina-andrade",
+      type: "player",
+      refId: "erick-medina-andrade",
+      title: "Erick Medina Andrade",
+    },
+  ]);
+  const [systemPanelSizes, setSystemPanelSizes] = useState<number[]>([100]);
+  const [sheetPanelSizes, setSheetPanelSizes] = useState<number[]>([100]);
+
+  const openPanels = activeTab === "system" ? systemPanels : sheetPanels;
+  const panelSizes = activeTab === "system" ? systemPanelSizes : sheetPanelSizes;
+  const setActivePanels = activeTab === "system" ? setSystemPanels : setSheetPanels;
+  const setActivePanelSizes = activeTab === "system" ? setSystemPanelSizes : setSheetPanelSizes;
 
   useEffect(() => {
     let isMounted = true;
@@ -278,7 +331,7 @@ export function SystemWorkspace() {
       return;
     }
 
-    addPanel({
+    addSystemPanel({
       id: `rule:${article.id}`,
       type: "rule",
       refId: article.id,
@@ -293,7 +346,7 @@ export function SystemWorkspace() {
       return;
     }
 
-    addPanel({
+    addSheetPanel({
       id: `player:${player.id}`,
       type: "player",
       refId: player.id,
@@ -308,7 +361,7 @@ export function SystemWorkspace() {
       return;
     }
 
-    addPanel({
+    addSheetPanel({
       id: `npc:${npc.id}`,
       type: "npc",
       refId: npc.id,
@@ -316,26 +369,40 @@ export function SystemWorkspace() {
     });
   }
 
-  function addPanel(panelToOpen: OpenPanel) {
-    setOpenPanels((currentPanels) => {
+  function addSystemPanel(panelToOpen: OpenPanel) {
+    setActiveTab("system");
+    setSystemPanels((currentPanels) => {
       if (currentPanels.some((panel) => panel.id === panelToOpen.id)) {
         return currentPanels;
       }
 
       const nextPanels = [...currentPanels, panelToOpen].slice(-MAX_OPEN_PANELS);
-      setPanelSizes(normalizePanelSizes(nextPanels.length));
+      setSystemPanelSizes(normalizePanelSizes(nextPanels.length));
+      return nextPanels;
+    });
+  }
+
+  function addSheetPanel(panelToOpen: OpenPanel) {
+    setActiveTab("sheets");
+    setSheetPanels((currentPanels) => {
+      if (currentPanels.some((panel) => panel.id === panelToOpen.id)) {
+        return currentPanels;
+      }
+
+      const nextPanels = [...currentPanels, panelToOpen].slice(-MAX_OPEN_PANELS);
+      setSheetPanelSizes(normalizePanelSizes(nextPanels.length));
       return nextPanels;
     });
   }
 
   function closePanel(panelId: string) {
-    setOpenPanels((currentPanels) => {
+    setActivePanels((currentPanels) => {
       if (currentPanels.length === 1) {
         return currentPanels;
       }
 
       const nextPanels = currentPanels.filter((panel) => panel.id !== panelId);
-      setPanelSizes(normalizePanelSizes(nextPanels.length));
+      setActivePanelSizes(normalizePanelSizes(nextPanels.length));
       return nextPanels;
     });
   }
@@ -348,7 +415,7 @@ export function SystemWorkspace() {
       ),
     };
 
-    setOpenPanels((currentPanels) =>
+    setSystemPanels((currentPanels) =>
       currentPanels.map((panel) =>
         panel.type === "rule" && panel.refId === updatedRule.id
           ? { ...panel, title: updatedRule.title }
@@ -367,7 +434,7 @@ export function SystemWorkspace() {
       ),
     };
 
-    setOpenPanels((currentPanels) =>
+    setSheetPanels((currentPanels) =>
       currentPanels.map((panel) =>
         panel.type === "npc" && panel.refId === updatedNpc.id
           ? { ...panel, title: updatedNpc.name }
@@ -386,7 +453,7 @@ export function SystemWorkspace() {
       ),
     };
 
-    setOpenPanels((currentPanels) =>
+    setSheetPanels((currentPanels) =>
       currentPanels.map((panel) =>
         panel.type === "player" && panel.refId === updatedPlayer.id
           ? { ...panel, title: updatedPlayer.characterName }
@@ -427,7 +494,7 @@ export function SystemWorkspace() {
         npcs: data.npcs ?? [],
         players: data.players ?? [],
       });
-      setOpenPanels([
+      setSystemPanels([
         {
           id: "rule:combate-rodadas",
           type: "rule",
@@ -435,7 +502,17 @@ export function SystemWorkspace() {
           title: "Combate: rodadas, iniciativa e turno",
         },
       ]);
-      setPanelSizes([100]);
+      setSheetPanels([
+        {
+          id: "player:erick-medina-andrade",
+          type: "player",
+          refId: "erick-medina-andrade",
+          title: "Erick Medina Andrade",
+        },
+      ]);
+      setSystemPanelSizes([100]);
+      setSheetPanelSizes([100]);
+      setActiveTab("system");
       setSaveStatus("Inserts iniciais restaurados");
     } catch {
       setSaveStatus("Erro ao restaurar inserts iniciais");
@@ -476,7 +553,7 @@ export function SystemWorkspace() {
         nextLeftSize = combinedSize - minPercent;
       }
 
-      setPanelSizes((currentSizes) => {
+      setActivePanelSizes((currentSizes) => {
         const nextSizes = [...currentSizes];
         nextSizes[dividerIndex] = nextLeftSize;
         nextSizes[dividerIndex + 1] = nextRightSize;
@@ -495,7 +572,7 @@ export function SystemWorkspace() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-6">
+      <header className="grid h-16 grid-cols-[1fr_auto_1fr] items-center border-b border-zinc-800 bg-zinc-950 px-6">
         <div>
           <h1 className="text-xl font-bold text-amber-400">Mesa do Mestre</h1>
           <p className="text-xs text-zinc-500">
@@ -503,7 +580,32 @@ export function SystemWorkspace() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+          <button
+            onClick={() => setActiveTab("system")}
+            className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${
+              activeTab === "system"
+                ? "bg-amber-500 text-zinc-950"
+                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            Sistema
+          </button>
+          <button
+            onClick={() => setActiveTab("sheets")}
+            className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${
+              activeTab === "sheets"
+                ? "bg-amber-500 text-zinc-950"
+                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            Fichas
+          </button>
+        </div>
+
+        <div className="flex items-center justify-end gap-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-300">
             <Database className="h-3.5 w-3.5" />
             {isLoading ? "Carregando..." : saveStatus}
@@ -519,88 +621,22 @@ export function SystemWorkspace() {
       </header>
 
       <div className="grid h-[calc(100vh-4rem)] grid-cols-[320px_1fr]">
-        <aside className="border-r border-zinc-800 bg-zinc-900/70 p-4">
-          <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
-            <Home className="h-4 w-4 text-amber-400" />
-            Biblioteca do Sistema
-          </div>
-
-          <nav className="space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const article = rulebookData.rules.find((rule) => rule.category === item.id);
-              const isOpen = article ? openedPanelIds.has(`rule:${article.id}`) : false;
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => openRuleByCategory(item.id)}
-                  className={`w-full rounded-lg border px-3 py-3 text-left transition ${
-                    isOpen
-                      ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
-                      : "border-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-amber-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-3 text-sm font-medium">
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </span>
-                  <span className="mt-1 block pl-7 text-xs text-zinc-500">{item.description}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="mt-8">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Fichas de players
-            </p>
-
-            {rulebookData.players.map((player) => {
-              const isOpen = openedPanelIds.has(`player:${player.id}`);
-
-              return (
-                <button
-                  key={player.id}
-                  onClick={() => openPlayer(player.id)}
-                  className={`mb-2 w-full rounded-md border p-3 text-left text-sm transition ${
-                    isOpen
-                      ? "border-amber-500/50 bg-amber-500/10"
-                      : "border-zinc-800 bg-zinc-950 hover:border-amber-500/40"
-                  }`}
-                >
-                  <p className="font-medium text-zinc-200">{player.characterName}</p>
-                  <p className="text-xs text-zinc-500">{player.role}</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {rulebookData.npcs.length > 0 && (
-            <div className="mt-8">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Fichas rápidas de NPC
-              </p>
-
-              {rulebookData.npcs.map((npc) => (
-                <button
-                  key={npc.id}
-                  onClick={() => openNpc(npc.id)}
-                  className="mb-2 w-full rounded-md border border-zinc-800 bg-zinc-950 p-3 text-left text-sm transition hover:border-amber-500/40"
-                >
-                  <p className="font-medium text-zinc-200">{npc.name}</p>
-                  <p className="text-xs text-zinc-500">{npc.role}</p>
-                </button>
-              ))}
-            </div>
+        <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/70 p-4">
+          {activeTab === "system" ? (
+            <SystemSidebar
+              rules={rulebookData.rules}
+              openedPanelIds={openedPanelIds}
+              onOpenRuleByCategory={openRuleByCategory}
+            />
+          ) : (
+            <SheetsSidebar
+              players={rulebookData.players}
+              npcs={rulebookData.npcs}
+              openedPanelIds={openedPanelIds}
+              onOpenPlayer={openPlayer}
+              onOpenNpc={openNpc}
+            />
           )}
-
-          <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
-            <p className="font-semibold text-amber-300">Como usar</p>
-            <p className="mt-1">
-              Abra uma regra e a ficha de Erick ao mesmo tempo. Arraste o divisor para ajustar o tamanho e use Editar para salvar no banco local.
-            </p>
-          </div>
         </aside>
 
         <section className="overflow-hidden bg-zinc-950 p-4">
@@ -644,6 +680,180 @@ export function SystemWorkspace() {
         </section>
       </div>
     </main>
+  );
+}
+
+function SystemSidebar({
+  rules,
+  openedPanelIds,
+  onOpenRuleByCategory,
+}: {
+  rules: RuleArticle[];
+  openedPanelIds: Set<string>;
+  onOpenRuleByCategory: (category: RuleCategory) => void;
+}) {
+  return (
+    <>
+      <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
+        <Home className="h-4 w-4 text-amber-400" />
+        Sistema
+      </div>
+
+      <nav className="space-y-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const article = rules.find((rule) => rule.category === item.id);
+          const isOpen = article ? openedPanelIds.has(`rule:${article.id}`) : false;
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => onOpenRuleByCategory(item.id)}
+              className={`w-full rounded-lg border px-3 py-3 text-left transition ${
+                isOpen
+                  ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+                  : "border-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-amber-300"
+              }`}
+            >
+              <span className="flex items-center gap-3 text-sm font-medium">
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </span>
+              <span className="mt-1 block pl-7 text-xs text-zinc-500">{item.description}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+        <p className="font-semibold text-amber-300">Aba Sistema</p>
+        <p className="mt-1">
+          Aqui ficam apenas regras e referências do sistema. Abra várias regras e ajuste os divisores.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function SheetsSidebar({
+  players,
+  npcs,
+  openedPanelIds,
+  onOpenPlayer,
+  onOpenNpc,
+}: {
+  players: PlayerSheet[];
+  npcs: NpcSheet[];
+  openedPanelIds: Set<string>;
+  onOpenPlayer: (playerId: string) => void;
+  onOpenNpc: (npcId: string) => void;
+}) {
+  return (
+    <>
+      <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
+        <Users className="h-4 w-4 text-amber-400" />
+        Fichas
+      </div>
+
+      <div className="space-y-6">
+        <SheetGroup title="Players" description="Fichas dos jogadores">
+          {players.map((player) => {
+            const isOpen = openedPanelIds.has(`player:${player.id}`);
+
+            return (
+              <SheetButton
+                key={player.id}
+                isOpen={isOpen}
+                title={player.characterName}
+                description={player.role}
+                onClick={() => onOpenPlayer(player.id)}
+              />
+            );
+          })}
+        </SheetGroup>
+
+        {sheetCategories
+          .filter((category) => category.id !== "players")
+          .map((category) => {
+            const categoryNpcs = npcs.filter((npc) => npc.category === category.id);
+
+            if (categoryNpcs.length === 0) {
+              return null;
+            }
+
+            return (
+              <SheetGroup key={category.id} title={category.label} description={category.description}>
+                {categoryNpcs.map((npc) => {
+                  const isOpen = openedPanelIds.has(`npc:${npc.id}`);
+
+                  return (
+                    <SheetButton
+                      key={npc.id}
+                      isOpen={isOpen}
+                      title={npc.name}
+                      description={npc.role}
+                      onClick={() => onOpenNpc(npc.id)}
+                    />
+                  );
+                })}
+              </SheetGroup>
+            );
+          })}
+      </div>
+
+      <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+        <p className="font-semibold text-amber-300">Aba Fichas</p>
+        <p className="mt-1">
+          Aqui ficam apenas fichas. Abra mais de uma ficha e compare usando tela dividida.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function SheetGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p>
+        <p className="text-xs text-zinc-600">{description}</p>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function SheetButton({
+  isOpen,
+  title,
+  description,
+  onClick,
+}: {
+  isOpen: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full rounded-md border p-3 text-left text-sm transition ${
+        isOpen
+          ? "border-amber-500/50 bg-amber-500/10"
+          : "border-zinc-800 bg-zinc-950 hover:border-amber-500/40"
+      }`}
+    >
+      <p className="font-medium text-zinc-200">{title}</p>
+      <p className="line-clamp-2 text-xs text-zinc-500">{description}</p>
+    </button>
   );
 }
 
@@ -907,45 +1117,23 @@ function PlayerPanel({
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/20">
-      <header className="border-b border-zinc-800 p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            {isEditing ? (
-              <input
-                value={draftName}
-                onChange={(event) => setDraftName(event.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg font-semibold text-amber-300 outline-none focus:border-amber-500"
-              />
-            ) : (
-              <h2 className="truncate text-lg font-semibold text-amber-300">{player.characterName}</h2>
-            )}
-
-            {isEditing ? (
-              <input
-                value={draftRole}
-                onChange={(event) => setDraftRole(event.target.value)}
-                className="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-amber-500"
-              />
-            ) : (
-              <p className="mt-1 text-sm text-zinc-400">{player.role}</p>
-            )}
-          </div>
-
-          <PanelActions
-            isEditing={isEditing}
-            canClose={canClose}
-            onEdit={() => setIsEditing(true)}
-            onSave={saveChanges}
-            onCancel={() => setIsEditing(false)}
-            onClose={onClose}
-          />
-        </div>
-      </header>
+      <PanelHeader
+        title={player.characterName}
+        subtitle={player.role}
+        isEditing={isEditing}
+        canClose={canClose}
+        onEdit={() => setIsEditing(true)}
+        onSave={saveChanges}
+        onCancel={() => setIsEditing(false)}
+        onClose={onClose}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {isEditing ? (
           <div className="space-y-4">
+            <EditableInput label="Nome do personagem" value={draftName} onChange={setDraftName} />
             <EditableInput label="Nome do jogador" value={draftPlayerName} onChange={setDraftPlayerName} />
+            <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
             <EditableInput label="Tier" value={draftTier} onChange={setDraftTier} />
             <EditableTextarea label="Conceito" value={draftConcept} onChange={setDraftConcept} rows={5} />
             <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStatus} onChange={setDraftStatus} rows={8} />
@@ -960,51 +1148,19 @@ function PlayerPanel({
             <EditableTextarea label="Notas do mestre, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={7} />
           </div>
         ) : (
-          <div className="space-y-6">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-500">Player</p>
-              <p className="text-sm text-zinc-300">{player.playerName}</p>
-              <p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">Tier</p>
-              <p className="text-sm text-zinc-300">{player.tier}</p>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="mb-2 text-sm font-semibold text-amber-300">Conceito</p>
-              <p className="text-sm leading-7 text-zinc-300">{player.concept}</p>
-            </div>
-
-            <LabeledGrid title="Status" items={player.status} />
-            <LabeledGrid title="Atributos" items={player.attributes} />
-            <LabeledGrid title="Recursos do mestre" items={player.resources} />
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="mb-3 text-sm font-semibold text-amber-300">Habilidades</p>
-              <div className="space-y-4">
-                {player.abilities.map((ability) => (
-                  <div key={ability.name} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-zinc-100">{ability.name}</p>
-                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{ability.type}</span>
-                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">{ability.scale}</span>
-                    </div>
-                    <p className="mt-2 text-xs text-zinc-500">Custo: {ability.cost}</p>
-                    <p className="text-xs text-zinc-500">Teste: {ability.test}</p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-300">{ability.effect}</p>
-                    {ability.limit && <p className="mt-2 text-xs leading-5 text-red-300/80">Limite: {ability.limit}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-              <p className="mb-3 text-sm font-semibold text-amber-300">Notas do mestre</p>
-              <ul className="space-y-2 text-sm text-zinc-300">
-                {player.notes.map((note) => (
-                  <li key={note}>• {note}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          <SheetReadView
+            typeLabel="Ficha de player"
+            ownerLabel="Player"
+            ownerValue={player.playerName}
+            tier={player.tier}
+            concept={player.concept}
+            status={player.status}
+            attributes={player.attributes}
+            resourcesTitle="Recursos do mestre"
+            resources={player.resources}
+            abilities={player.abilities}
+            notes={player.notes}
+          />
         )}
       </div>
     </article>
@@ -1029,6 +1185,15 @@ function NpcPanel({
   const [draftStats, setDraftStats] = useState(labeledValuesToText(npc.stats));
   const [draftNotes, setDraftNotes] = useState(npc.notes.join("\n"));
 
+  useEffect(() => {
+    setDraftName(npc.name);
+    setDraftRole(npc.role);
+    setDraftDescription(npc.description);
+    setDraftStats(labeledValuesToText(npc.stats));
+    setDraftNotes(npc.notes.join("\n"));
+    setIsEditing(false);
+  }, [npc]);
+
   function saveChanges() {
     onUpdateNpc({
       ...npc,
@@ -1043,23 +1208,17 @@ function NpcPanel({
   }
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100">
-      <header className="border-b border-zinc-800 p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-amber-300">{npc.name}</h2>
-            <p className="mt-1 text-sm text-zinc-400">{npc.role}</p>
-          </div>
-          <PanelActions
-            isEditing={isEditing}
-            canClose={canClose}
-            onEdit={() => setIsEditing(true)}
-            onSave={saveChanges}
-            onCancel={() => setIsEditing(false)}
-            onClose={onClose}
-          />
-        </div>
-      </header>
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/20">
+      <PanelHeader
+        title={npc.name}
+        subtitle={npc.role}
+        isEditing={isEditing}
+        canClose={canClose}
+        onEdit={() => setIsEditing(true)}
+        onSave={saveChanges}
+        onCancel={() => setIsEditing(false)}
+        onClose={onClose}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {isEditing ? (
@@ -1067,17 +1226,146 @@ function NpcPanel({
             <EditableInput label="Nome" value={draftName} onChange={setDraftName} />
             <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
             <EditableTextarea label="Descrição" value={draftDescription} onChange={setDraftDescription} rows={5} />
-            <EditableTextarea label="Status" value={draftStats} onChange={setDraftStats} rows={6} />
-            <EditableTextarea label="Notas" value={draftNotes} onChange={setDraftNotes} rows={6} />
+            <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStats} onChange={setDraftStats} rows={12} />
+            <EditableTextarea label="Notas e habilidades, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={10} />
           </div>
         ) : (
-          <div className="space-y-5">
-            <p className="text-sm leading-7 text-zinc-300">{npc.description}</p>
-            <LabeledGrid title="Status" items={npc.stats} />
-          </div>
+          <SheetReadView
+            typeLabel="Ficha de NPC"
+            ownerLabel="Categoria"
+            ownerValue={getSheetCategoryLabel(npc.category)}
+            tier={npc.stats.find((item) => item.label === "Tier")?.value ?? "—"}
+            concept={npc.description}
+            status={npc.stats}
+            attributes={npc.stats.filter((item) => ["For", "Con", "Des", "Int", "Sab", "Car"].includes(item.label))}
+            resourcesTitle="Notas e habilidades"
+            resources={[]}
+            abilities={[]}
+            notes={npc.notes}
+          />
         )}
       </div>
     </article>
+  );
+}
+
+function getSheetCategoryLabel(category: SheetCategory) {
+  return sheetCategories.find((item) => item.id === category)?.label ?? category;
+}
+
+function PanelHeader({
+  title,
+  subtitle,
+  isEditing,
+  canClose,
+  onEdit,
+  onSave,
+  onCancel,
+  onClose,
+}: {
+  title: string;
+  subtitle: string;
+  isEditing: boolean;
+  canClose: boolean;
+  onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <header className="border-b border-zinc-800 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-lg font-semibold text-amber-300">{title}</h2>
+          <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+        </div>
+        <PanelActions
+          isEditing={isEditing}
+          canClose={canClose}
+          onEdit={onEdit}
+          onSave={onSave}
+          onCancel={onCancel}
+          onClose={onClose}
+        />
+      </div>
+    </header>
+  );
+}
+
+function SheetReadView({
+  typeLabel,
+  ownerLabel,
+  ownerValue,
+  tier,
+  concept,
+  status,
+  attributes,
+  resourcesTitle,
+  resources,
+  abilities,
+  notes,
+}: {
+  typeLabel: string;
+  ownerLabel: string;
+  ownerValue: string;
+  tier: string;
+  concept: string;
+  status: LabeledValue[];
+  attributes: LabeledValue[];
+  resourcesTitle: string;
+  resources: LabeledValue[];
+  abilities: PlayerAbility[];
+  notes: string[];
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-xs uppercase tracking-wide text-zinc-500">{typeLabel}</p>
+        <p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">{ownerLabel}</p>
+        <p className="text-sm text-zinc-300">{ownerValue}</p>
+        <p className="mt-3 text-xs uppercase tracking-wide text-zinc-500">Tier</p>
+        <p className="text-sm text-zinc-300">{tier}</p>
+      </div>
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+        <p className="mb-2 text-sm font-semibold text-amber-300">Conceito / descrição</p>
+        <p className="text-sm leading-7 text-zinc-300">{concept}</p>
+      </div>
+
+      <LabeledGrid title="Status e combate" items={status} />
+      {attributes.length > 0 && <LabeledGrid title="Atributos" items={attributes} />}
+      {resources.length > 0 && <LabeledGrid title={resourcesTitle} items={resources} />}
+
+      {abilities.length > 0 && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+          <p className="mb-3 text-sm font-semibold text-amber-300">Habilidades</p>
+          <div className="space-y-4">
+            {abilities.map((ability) => (
+              <div key={ability.name} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-zinc-100">{ability.name}</p>
+                  <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{ability.type}</span>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">{ability.scale}</span>
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">Custo: {ability.cost}</p>
+                <p className="text-xs text-zinc-500">Teste: {ability.test}</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-300">{ability.effect}</p>
+                {ability.limit && <p className="mt-2 text-xs leading-5 text-red-300/80">Limite: {ability.limit}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+        <p className="mb-3 text-sm font-semibold text-amber-300">{resourcesTitle}</p>
+        <ul className="space-y-2 text-sm text-zinc-300">
+          {notes.map((note) => (
+            <li key={note}>• {note}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -1086,8 +1374,8 @@ function LabeledGrid({ title, items }: { title: string; items: LabeledValue[] })
     <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
       <p className="mb-3 text-sm font-semibold text-amber-300">{title}</p>
       <div className="grid grid-cols-2 gap-3">
-        {items.map((item) => (
-          <div key={`${title}-${item.label}`} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
+        {items.map((item, index) => (
+          <div key={`${title}-${item.label}-${index}`} className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3">
             <p className="text-xs uppercase text-zinc-500">{item.label}</p>
             <p className="mt-1 text-sm font-semibold text-zinc-100">{item.value}</p>
           </div>
