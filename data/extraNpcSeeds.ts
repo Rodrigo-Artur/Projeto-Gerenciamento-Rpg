@@ -1,0 +1,60 @@
+import type { LabeledValue, NpcSheet } from "@/types/rulebook";
+
+const values = (entries: [string, string][]): LabeledValue[] =>
+  entries.map(([label, value]) => ({ label, value }));
+
+export const extraNpcSheets: NpcSheet[] = [
+  {
+    id: "varkhul-presa-da-corrupcao",
+    category: "ameacas-pesadas",
+    name: "Varkhûl, Presa da Corrupção",
+    role: "Boss Tier 4 / avatar lupino de corrupção",
+    description:
+      "Avatar de caça de um deus da corrupção. Surge como um lobo colossal de carne escura, ossos expostos, olhos verdes doentios e fumaça negra saindo da boca. Deve ser usado como ameaça de arco, guardião corrompido, avatar invocado por cultistas ou manifestação direta de uma entidade maior. Sua força principal é desgastar, marcar, enfraquecer e transformar o campo de batalha em território corrompido.",
+    stats: values([
+      ["Categoria", "Boss / Avatar Divino"],
+      ["Tier", "Tier 4"],
+      ["HP", "560"],
+      ["Raça/Base", "Espírito"],
+      ["Variação", "Espírito Conceitual / Avatar Divino"],
+      ["Forma", "Lobo colossal de carne escura, ossos expostos, olhos verdes doentios e fumaça negra"],
+      ["Função", "Boss de controle, corrupção e desgaste"],
+      ["Conceito", "Corrupção, apodrecimento, tentação e contaminação espiritual"],
+      ["Movimento", "18m"],
+      ["Tamanho", "Grande / Colossal menor"],
+      ["Alcance corpo a corpo", "4m"],
+      ["For", "32"],
+      ["Con", "38"],
+      ["Des", "28"],
+      ["Int", "20"],
+      ["Sab", "34"],
+      ["Car", "42"],
+      ["Iniciativa", "1d20 + Destreza"],
+      ["Ataque físico", "1d20 + Força ou Destreza"],
+      ["Ataque espiritual/conceitual", "1d20 + Sabedoria ou Carisma"],
+      ["Defesa física", "1d20 + Constituição ou Destreza"],
+      ["Defesa espiritual/mental", "1d20 + Sabedoria ou Carisma"],
+      ["Garras Corrompidas", "4d12 + 14 de dano físico/corrupção"],
+      ["Mordida Lupina", "5d10 + 16 de dano físico/corrupção"],
+      ["Redução de Dano", "2d10 + 5"],
+      ["Regeneração", "2d10 por rodada"],
+    ]),
+    notes: [
+      "Fraqueza Principal: fogo purificador, luz sagrada, prata ritualística ou símbolos de pureza verdadeira ignoram metade da redução de dano de Varkhûl e bloqueiam sua regeneração por 3 rodadas.",
+      "Interrupção de suprema: se sofrer dano purificador enquanto usa uma habilidade suprema, faz 1d20 + Constituição contra DT 26. Se falhar, perde a transformação ou tem a habilidade interrompida.",
+      "Marca de Corrupção: um alvo pode ter até 3 marcas. 1 marca dá -2 em testes contra habilidades do Avatar. 2 marcas reduzem cura e regeneração recebidas pela metade. 3 marcas deixam o alvo Apodrecendo.",
+      "Apodrecendo: no fim de cada turno, o alvo sofre 3d10 de dano de corrupção.",
+      "Remover marca: gastar ação principal e passar em DT 22 de Sabedoria, Constituição ou Inteligência. Fogo purificador, luz sagrada ou ritual de limpeza removem 2 marcas de uma vez.",
+      "Aura da Podridão Divina: passiva rara, alcance 15m. Inimigo que começa o turno na aura testa 1d20 + Sabedoria ou Constituição contra DT 24. Se falhar, recebe 1 Marca de Corrupção. Áreas purificadas, símbolos sagrados ou luz espiritual forte anulam a aura.",
+      "Mordida da Mácula: ativa comum, ação principal, 1d20 + Força contra defesa do alvo, alcance 4m. Causa 3d10 + 16 físico/corrupção e aplica 1 Marca de Corrupção. Se o alvo já tiver 3 marcas, causa +2d10 adicional. Só aplica 1 marca por rodada com esta habilidade.",
+      "Passos no Lodo da Alma: ativa especial, movimento + ação rápida, teleporte até 24m para área corrompida, sombra profunda ou perto de alvo marcado. Ao reaparecer, cria poça de corrupção em raio de 6m por 2 rodadas; inimigos testam 1d20 + Destreza contra DT 22 ou ficam com movimento pela metade e recebem 1 marca. Recarga 2 rodadas.",
+      "Uivo do Fim Imaculado: ativa rara, ação principal, alcance 30m ao redor. Alvos testam 1d20 + Sabedoria ou Carisma contra DT 25. Falha: 6d12 espiritual/corrupção, 1 marca e desvantagem em ataques contra o Avatar por 2 rodadas. Sucesso: metade do dano e sem marca. Recarga 4 rodadas.",
+      "Devorar Pureza: ativa rara, ação principal, exige alvo com pelo menos 2 Marcas de Corrupção. Teste 1d20 + Força ou Carisma contra defesa física ou espiritual do alvo, alcance 4m. Causa 6d12 corrupção, cura Varkhûl em metade do dano final e remove 1 efeito positivo do alvo. Depois de usar, Varkhûl não regenera HP no início da próxima rodada. Recarga 4 rodadas.",
+      "Manifestação: Lobo do Deus Podre: transformação suprema, 1 vez por combate, ativa com 1 rodada de preparação ou automaticamente abaixo de 50% do HP. Dura 4 rodadas. Recebe +10 Força, +10 Constituição, +10 Carisma, regeneração vira 2d10+10, Aura aumenta para 25m, Mordida da Mácula aplica 2 marcas e ataques ignoram 10 pontos de redução.",
+      "Consequência da Manifestação: ao terminar, Varkhûl sofre 80 de dano verdadeiro, perde regeneração por 2 rodadas e fica Exposto, recebendo +25% de dano da próxima fonte que acertá-lo.",
+      "Roteiro sugerido: rodada 1 usar Aura e aplicar marcas; rodada 2 usar Passos para alcançar alvo marcado ou isolar suporte; rodada 3 usar Uivo; rodada 4 usar Devorar Pureza; abaixo de 50% ativar Manifestação.",
+      "Contrajogos: fogo purificador, luz sagrada, prata ritualística, símbolos de pureza, rituais de limpeza, áreas purificadas, proteção mental, fé, pactos espirituais e barreiras de conceito.",
+      "Ajuste fácil: HP 450, DT das marcas -2 e Manifestação dura 3 rodadas. Ajuste difícil: HP 650, Aura 20m e Devorar Pureza remove 2 efeitos positivos.",
+    ],
+  },
+];
