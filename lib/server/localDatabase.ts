@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
+import { extraNpcSheets } from "@/data/extraNpcSeeds";
 import {
   initialNpcSheets,
   initialPlayerSheets,
@@ -44,6 +45,7 @@ type PlayerRow = {
 
 const DB_DIRECTORY = path.join(process.cwd(), ".local");
 const DB_PATH = path.join(DB_DIRECTORY, "mesa-do-mestre.sqlite");
+const allInitialNpcSheets = [...initialNpcSheets, ...extraNpcSheets];
 
 declare global {
   // eslint-disable-next-line no-var
@@ -229,7 +231,7 @@ function seedInitialData(db: Database.Database) {
     }
   });
 
-  insertNpcs(initialNpcSheets);
+  insertNpcs(allInitialNpcSheets);
 }
 
 export function getLocalDatabasePath() {
@@ -424,7 +426,7 @@ export function resetDatabaseToInitialSeed() {
 
   saveRulebookData({
     rules: initialRuleArticles,
-    npcs: initialNpcSheets,
+    npcs: allInitialNpcSheets,
     players: initialPlayerSheets,
   });
 }
