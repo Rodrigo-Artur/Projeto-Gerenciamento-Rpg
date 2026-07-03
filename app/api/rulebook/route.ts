@@ -6,7 +6,7 @@ import {
   getRulebookData,
   resetDatabaseToInitialSeed,
   saveRulebookData,
-} from "@/lib/server/localDatabase";
+} from "@/lib/server/tableSystemDatabase";
 import type { RulebookData } from "@/types/rulebook";
 
 export const runtime = "nodejs";
