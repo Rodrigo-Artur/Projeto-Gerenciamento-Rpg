@@ -26,6 +26,7 @@ import type {
   OpenPanel,
   PlayerAbility,
   PlayerSheet,
+  RpgSystem,
   RpgTable,
   RuleArticle,
   RuleCategory,
@@ -51,15 +52,24 @@ type SheetCategoryItem = {
 const PANEL_MIN_WIDTH = 320;
 const MAX_OPEN_PANELS = 4;
 
+const defaultSystem: RpgSystem = {
+  id: "kaiju-rpg",
+  name: "Kaiju RPG",
+  description: "Sistema base do projeto.",
+};
+
 const defaultTable: RpgTable = {
   id: "mesa-principal",
+  systemId: defaultSystem.id,
   name: "Mesa Principal",
   description: "Dados antigos preservados automaticamente.",
 };
 
 const initialData: RulebookData = {
+  systems: [defaultSystem],
   tables: [defaultTable],
   activeTableId: defaultTable.id,
+  activeSystemId: defaultSystem.id,
   rules: [],
   npcs: [],
   players: [],
@@ -103,21 +113,35 @@ function labeledValuesToText(values: LabeledValue[]) {
 function parseLabeledValues(value: string): LabeledValue[] {
   return splitTextIntoList(value).map((line) => {
     const [label, ...valueParts] = line.split(":");
-    return { label: label?.trim() || "Campo", value: valueParts.join(":").trim() || "-" };
+    return {
+      label: label?.trim() || "Campo",
+      value: valueParts.join(":").trim() || "-",
+    };
   });
 }
 
 function abilitiesToText(abilities: PlayerAbility[]) {
   return abilities
     .map((ability) =>
-      [ability.name, ability.type, ability.scale, ability.cost, ability.test, ability.effect, ability.limit ?? ""].join(" | ")
+      [
+        ability.name,
+        ability.type,
+        ability.scale,
+        ability.cost,
+        ability.test,
+        ability.effect,
+        ability.limit ?? "",
+      ].join(" | ")
     )
     .join("\n");
 }
 
 function parseAbilities(value: string): PlayerAbility[] {
   return splitTextIntoList(value).map((line) => {
-    const [name, type, scale, cost, test, effect, limit] = line.split("|").map((part) => part.trim());
+    const [name, type, scale, cost, test, effect, limit] = line
+      .split("|")
+      .map((part) => part.trim());
+
     return {
       name: name || "Habilidade",
       type: type || "—",
@@ -132,7 +156,9 @@ function parseAbilities(value: string): PlayerAbility[] {
 
 function firstRulePanel(rules: RuleArticle[]): OpenPanel[] {
   const firstRule = rules[0];
-  return firstRule ? [{ id: `rule:${firstRule.id}`, type: "rule", refId: firstRule.id, title: firstRule.title }] : [];
+  return firstRule
+    ? [{ id: `rule:${firstRule.id}`, type: "rule", refId: firstRule.id, title: firstRule.title }]
+    : [];
 }
 
 function firstSheetPanel(players: PlayerSheet[], npcs: NpcSheet[]): OpenPanel[] {
@@ -140,7 +166,14 @@ function firstSheetPanel(players: PlayerSheet[], npcs: NpcSheet[]): OpenPanel[] 
   const firstNpc = npcs[0];
 
   if (firstPlayer) {
-    return [{ id: `player:${firstPlayer.id}`, type: "player", refId: firstPlayer.id, title: firstPlayer.characterName }];
+    return [
+      {
+        id: `player:${firstPlayer.id}`,
+        type: "player",
+        refId: firstPlayer.id,
+        title: firstPlayer.characterName,
+      },
+    ];
   }
 
   if (firstNpc) {
@@ -148,6 +181,23 @@ function firstSheetPanel(players: PlayerSheet[], npcs: NpcSheet[]): OpenPanel[] 
   }
 
   return [];
+}
+
+function normalizeRulebookData(data: Partial<RulebookData>, fallbackTableId?: string): RulebookData {
+  const systems = data.systems?.length ? data.systems : [defaultSystem];
+  const tables = data.tables?.length ? data.tables : [defaultTable];
+  const activeTableId = data.activeTableId || fallbackTableId || tables[0]?.id || defaultTable.id;
+  const activeTable = tables.find((table) => table.id === activeTableId) ?? tables[0] ?? defaultTable;
+
+  return {
+    systems,
+    tables,
+    activeTableId: activeTable.id,
+    activeSystemId: data.activeSystemId || activeTable.systemId || systems[0]?.id || defaultSystem.id,
+    rules: data.rules ?? [],
+    npcs: data.npcs ?? [],
+    players: data.players ?? [],
+  };
 }
 
 export function SystemWorkspace() {
@@ -163,13 +213,31 @@ export function SystemWorkspace() {
 
   const openPanels = activeTab === "system" ? systemPanels : sheetPanels;
   const panelSizes = activeTab === "system" ? systemPanelSizes : sheetPanelSizes;
-  const activeTable = rulebookData.tables.find((table) => table.id === rulebookData.activeTableId) ?? rulebookData.tables[0] ?? defaultTable;
+  const activeTable =
+    rulebookData.tables.find((table) => table.id === rulebookData.activeTableId) ??
+    rulebookData.tables[0] ??
+    defaultTable;
+  const activeSystem =
+    rulebookData.systems.find((system) => system.id === rulebookData.activeSystemId) ??
+    rulebookData.systems.find((system) => system.id === activeTable.systemId) ??
+    rulebookData.systems[0] ??
+    defaultSystem;
 
   useEffect(() => {
     loadTable();
   }, []);
 
   const openedPanelIds = useMemo(() => new Set(openPanels.map((panel) => panel.id)), [openPanels]);
+
+  function applyLoadedData(data: RulebookData) {
+    setRulebookData(data);
+    const nextSystemPanels = firstRulePanel(data.rules);
+    const nextSheetPanels = firstSheetPanel(data.players, data.npcs);
+    setSystemPanels(nextSystemPanels);
+    setSheetPanels(nextSheetPanels);
+    setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
+    setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
+  }
 
   async function loadTable(tableId?: string) {
     setIsLoading(true);
@@ -183,22 +251,8 @@ export function SystemWorkspace() {
         throw new Error("Falha ao carregar o banco local.");
       }
 
-      const data = (await response.json()) as RulebookData;
-      const nextData: RulebookData = {
-        tables: data.tables?.length ? data.tables : [defaultTable],
-        activeTableId: data.activeTableId || tableId || defaultTable.id,
-        rules: data.rules ?? [],
-        npcs: data.npcs ?? [],
-        players: data.players ?? [],
-      };
-
-      setRulebookData(nextData);
-      const nextSystemPanels = firstRulePanel(nextData.rules);
-      const nextSheetPanels = firstSheetPanel(nextData.players, nextData.npcs);
-      setSystemPanels(nextSystemPanels);
-      setSheetPanels(nextSheetPanels);
-      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
-      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
+      const data = normalizeRulebookData((await response.json()) as RulebookData, tableId);
+      applyLoadedData(data);
       setSaveStatus("Banco local conectado");
     } catch {
       setSaveStatus("Erro ao carregar banco local");
@@ -222,24 +276,37 @@ export function SystemWorkspace() {
         throw new Error("Não foi possível salvar no banco local.");
       }
 
-      const savedData = (await response.json()) as RulebookData;
-      setRulebookData({
-        tables: savedData.tables ?? nextData.tables,
-        activeTableId: savedData.activeTableId ?? nextData.activeTableId,
-        rules: savedData.rules ?? nextData.rules,
-        npcs: savedData.npcs ?? nextData.npcs,
-        players: savedData.players ?? nextData.players,
-      });
+      const savedData = normalizeRulebookData((await response.json()) as RulebookData, nextData.activeTableId);
+      setRulebookData(savedData);
       setSaveStatus("Salvo no banco local");
     } catch {
       setSaveStatus("Erro ao salvar no banco local");
     }
   }
 
+  function chooseSystemIdForNewTable() {
+    const systems = rulebookData.systems.length ? rulebookData.systems : [defaultSystem];
+    const options = systems.map((system, index) => `${index + 1} - ${system.name}`).join("\n");
+    const answer = window.prompt(`Escolha qual sistema esta mesa vai usar:\n\n${options}`, "1");
+
+    if (answer === null) {
+      return null;
+    }
+
+    const selectedIndex = Number(answer) - 1;
+    return systems[selectedIndex]?.id ?? systems[0]?.id ?? defaultSystem.id;
+  }
+
   async function createNewTable() {
     const name = window.prompt("Nome da nova mesa:", "Nova mesa");
 
     if (!name?.trim()) {
+      return;
+    }
+
+    const systemId = chooseSystemIdForNewTable();
+
+    if (!systemId) {
       return;
     }
 
@@ -250,25 +317,53 @@ export function SystemWorkspace() {
       const response = await fetch("/api/rulebook", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create-table", name, description }),
+        body: JSON.stringify({ action: "create-table", name, description, systemId }),
       });
 
       if (!response.ok) {
         throw new Error("Erro ao criar mesa.");
       }
 
-      const data = (await response.json()) as RulebookData;
+      const data = normalizeRulebookData((await response.json()) as RulebookData);
       setActiveTab("system");
-      setRulebookData(data);
-      const nextSystemPanels = firstRulePanel(data.rules ?? []);
-      const nextSheetPanels = firstSheetPanel(data.players ?? [], data.npcs ?? []);
-      setSystemPanels(nextSystemPanels);
-      setSheetPanels(nextSheetPanels);
-      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
-      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
-      setSaveStatus("Nova mesa criada");
+      applyLoadedData(data);
+      setSaveStatus("Nova mesa criada sem fichas copiadas");
     } catch {
       setSaveStatus("Erro ao criar mesa");
+    }
+  }
+
+  async function createNewSystem() {
+    const name = window.prompt("Nome do novo sistema de RPG:", "Novo sistema");
+
+    if (!name?.trim()) {
+      return;
+    }
+
+    const description = window.prompt("Descrição curta do sistema:", "Sistema customizado para usar em diferentes mesas.") ?? "";
+    setSaveStatus("Criando novo sistema...");
+
+    try {
+      const response = await fetch("/api/rulebook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create-system",
+          name,
+          description,
+          tableId: rulebookData.activeTableId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao criar sistema.");
+      }
+
+      const data = normalizeRulebookData((await response.json()) as RulebookData, rulebookData.activeTableId);
+      setRulebookData(data);
+      setSaveStatus("Sistema criado; use Nova mesa para escolher ele");
+    } catch {
+      setSaveStatus("Erro ao criar sistema");
     }
   }
 
@@ -280,21 +375,18 @@ export function SystemWorkspace() {
   function openRule(articleId: string) {
     const article = rulebookData.rules.find((item) => item.id === articleId);
     if (!article) return;
-
     addSystemPanel({ id: `rule:${article.id}`, type: "rule", refId: article.id, title: article.title });
   }
 
   function openPlayer(playerId: string) {
     const player = rulebookData.players.find((item) => item.id === playerId);
     if (!player) return;
-
     addSheetPanel({ id: `player:${player.id}`, type: "player", refId: player.id, title: player.characterName });
   }
 
   function openNpc(npcId: string) {
     const npc = rulebookData.npcs.find((item) => item.id === npcId);
     if (!npc) return;
-
     addSheetPanel({ id: `npc:${npc.id}`, type: "npc", refId: npc.id, title: npc.name });
   }
 
@@ -338,28 +430,62 @@ export function SystemWorkspace() {
   }
 
   function updateRule(updatedRule: RuleArticle) {
-    const nextData = { ...rulebookData, rules: rulebookData.rules.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule)) };
-    setSystemPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "rule" && panel.refId === updatedRule.id ? { ...panel, title: updatedRule.title } : panel)));
+    const nextData = {
+      ...rulebookData,
+      rules: rulebookData.rules.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule)),
+    };
+
+    setSystemPanels((currentPanels) =>
+      currentPanels.map((panel) =>
+        panel.type === "rule" && panel.refId === updatedRule.id
+          ? { ...panel, title: updatedRule.title }
+          : panel
+      )
+    );
+
     persistData(nextData);
   }
 
   function updateNpc(updatedNpc: NpcSheet) {
-    const nextData = { ...rulebookData, npcs: rulebookData.npcs.map((npc) => (npc.id === updatedNpc.id ? updatedNpc : npc)) };
-    setSheetPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "npc" && panel.refId === updatedNpc.id ? { ...panel, title: updatedNpc.name } : panel)));
+    const nextData = {
+      ...rulebookData,
+      npcs: rulebookData.npcs.map((npc) => (npc.id === updatedNpc.id ? updatedNpc : npc)),
+    };
+
+    setSheetPanels((currentPanels) =>
+      currentPanels.map((panel) =>
+        panel.type === "npc" && panel.refId === updatedNpc.id ? { ...panel, title: updatedNpc.name } : panel
+      )
+    );
+
     persistData(nextData);
   }
 
   function updatePlayer(updatedPlayer: PlayerSheet) {
-    const nextData = { ...rulebookData, players: rulebookData.players.map((player) => (player.id === updatedPlayer.id ? updatedPlayer : player)) };
-    setSheetPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "player" && panel.refId === updatedPlayer.id ? { ...panel, title: updatedPlayer.characterName } : panel)));
+    const nextData = {
+      ...rulebookData,
+      players: rulebookData.players.map((player) => (player.id === updatedPlayer.id ? updatedPlayer : player)),
+    };
+
+    setSheetPanels((currentPanels) =>
+      currentPanels.map((panel) =>
+        panel.type === "player" && panel.refId === updatedPlayer.id
+          ? { ...panel, title: updatedPlayer.characterName }
+          : panel
+      )
+    );
+
     persistData(nextData);
   }
 
-  async function resetAllContent() {
-    const confirmed = window.confirm(`Deseja restaurar os inserts iniciais apenas da mesa "${activeTable.name}"? As outras mesas não serão alteradas.`);
+  async function resetTableSheets() {
+    const confirmed = window.confirm(
+      `Deseja restaurar apenas as fichas da mesa "${activeTable.name}"? As regras do sistema e as outras mesas não serão alteradas.`
+    );
+
     if (!confirmed) return;
 
-    setSaveStatus("Restaurando inserts da mesa atual...");
+    setSaveStatus("Restaurando fichas da mesa atual...");
 
     try {
       const response = await fetch("/api/rulebook", {
@@ -368,19 +494,13 @@ export function SystemWorkspace() {
         body: JSON.stringify({ action: "reset-seed", tableId: rulebookData.activeTableId }),
       });
 
-      if (!response.ok) throw new Error("Erro ao restaurar seed.");
+      if (!response.ok) throw new Error("Erro ao restaurar fichas.");
 
-      const data = (await response.json()) as RulebookData;
-      setRulebookData(data);
-      const nextSystemPanels = firstRulePanel(data.rules ?? []);
-      const nextSheetPanels = firstSheetPanel(data.players ?? [], data.npcs ?? []);
-      setSystemPanels(nextSystemPanels);
-      setSheetPanels(nextSheetPanels);
-      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
-      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
-      setSaveStatus("Mesa atual restaurada");
+      const data = normalizeRulebookData((await response.json()) as RulebookData, rulebookData.activeTableId);
+      applyLoadedData(data);
+      setSaveStatus("Fichas da mesa restauradas");
     } catch {
-      setSaveStatus("Erro ao restaurar mesa atual");
+      setSaveStatus("Erro ao restaurar fichas da mesa");
     }
   }
 
@@ -444,7 +564,8 @@ export function SystemWorkspace() {
       <header className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-zinc-800 bg-zinc-950 px-6 py-3">
         <div>
           <h1 className="text-xl font-bold text-amber-400">Mesa do Mestre</h1>
-          <p className="text-xs text-zinc-500">Mesa atual: {activeTable.name}</p>
+          <p className="text-xs text-zinc-500">Mesa: {activeTable.name}</p>
+          <p className="text-xs text-zinc-600">Sistema: {activeSystem.name}</p>
         </div>
 
         <div className="flex rounded-xl border border-zinc-800 bg-zinc-900 p-1">
@@ -465,9 +586,14 @@ export function SystemWorkspace() {
             ))}
           </select>
 
-          <button onClick={createNewTable} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300">
+          <button onClick={createNewTable} className="top-action-button">
             <Plus className="h-3.5 w-3.5" />
             Nova mesa
+          </button>
+
+          <button onClick={createNewSystem} className="top-action-button">
+            <BookOpen className="h-3.5 w-3.5" />
+            Novo sistema
           </button>
 
           <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-300">
@@ -475,9 +601,9 @@ export function SystemWorkspace() {
             {isLoading ? "Carregando..." : saveStatus}
           </span>
 
-          <button onClick={resetAllContent} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-red-500/60 hover:text-red-300">
+          <button onClick={resetTableSheets} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-red-500/60 hover:text-red-300">
             <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar mesa
+            Restaurar fichas
           </button>
         </div>
       </header>
@@ -500,7 +626,12 @@ export function SystemWorkspace() {
                 <div key={panel.id} className="contents">
                   <div
                     className="h-full shrink-0"
-                    style={{ flexBasis: `${panelSizes[index] ?? 100 / openPanels.length}%`, flexGrow: 0, flexShrink: 0, minWidth: PANEL_MIN_WIDTH }}
+                    style={{
+                      flexBasis: `${panelSizes[index] ?? 100 / openPanels.length}%`,
+                      flexGrow: 0,
+                      flexShrink: 0,
+                      minWidth: PANEL_MIN_WIDTH,
+                    }}
                   >
                     <WorkspacePanel
                       panel={panel}
@@ -531,10 +662,7 @@ export function SystemWorkspace() {
 
 function TabButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: ElementType; label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${active ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"}`}
-    >
+    <button onClick={onClick} className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${active ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"}`}>
       <Icon className="h-4 w-4" />
       {label}
     </button>
@@ -566,6 +694,11 @@ function SystemSidebar({ rules, openedPanelIds, onOpenRuleByCategory }: { rules:
           );
         })}
       </nav>
+
+      <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+        <p className="font-semibold text-amber-300">Regras do sistema</p>
+        <p className="mt-1">As regras pertencem ao sistema de RPG. Várias mesas podem usar o mesmo sistema.</p>
+      </div>
     </>
   );
 }
@@ -575,12 +708,12 @@ function SheetsSidebar({ players, npcs, openedPanelIds, onOpenPlayer, onOpenNpc 
     <>
       <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
         <Users className="h-4 w-4 text-amber-400" />
-        Fichas
+        Fichas da mesa
       </div>
 
       <div className="space-y-6">
-        <SheetGroup title="Players" description="Fichas dos jogadores">
-          {players.map((player) => (
+        <SheetGroup title="Players" description="Fichas dos jogadores desta mesa">
+          {players.length === 0 ? <EmptySidebarText>Nenhum player nesta mesa.</EmptySidebarText> : players.map((player) => (
             <SheetButton key={player.id} isOpen={openedPanelIds.has(`player:${player.id}`)} title={player.characterName} description={player.role} onClick={() => onOpenPlayer(player.id)} />
           ))}
         </SheetGroup>
@@ -600,8 +733,19 @@ function SheetsSidebar({ players, npcs, openedPanelIds, onOpenPlayer, onOpenNpc 
             );
           })}
       </div>
+
+      {players.length === 0 && npcs.length === 0 && (
+        <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+          <p className="font-semibold text-amber-300">Mesa sem fichas</p>
+          <p className="mt-1">Isso é esperado em mesas novas. Fichas não são copiadas de outras mesas.</p>
+        </div>
+      )}
     </>
   );
+}
+
+function EmptySidebarText({ children }: { children: ReactNode }) {
+  return <p className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">{children}</p>;
 }
 
 function SheetGroup({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -627,8 +771,8 @@ function SheetButton({ isOpen, title, description, onClick }: { isOpen: boolean;
 
 function EmptyPanel({ activeTab }: { activeTab: WorkspaceTab }) {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 text-sm text-zinc-500">
-      {activeTab === "system" ? "Nenhuma regra aberta nesta mesa." : "Nenhuma ficha aberta nesta mesa."}
+    <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 text-center text-sm text-zinc-500">
+      {activeTab === "system" ? "Nenhuma regra aberta neste sistema." : "Nenhuma ficha pertence a esta mesa ainda."}
     </div>
   );
 }
@@ -667,7 +811,13 @@ function RulePanel({ article, relatedRules, canClose, onClose, onOpenRule, onUpd
   }, [article.id, article.title, article.summary, article.content, article.tags]);
 
   function saveChanges() {
-    onUpdateRule({ ...article, title: draftTitle.trim() || article.title, summary: draftSummary.trim(), content: draftContent.trim(), tags: draftTags.split(",").map((tag) => tag.trim()).filter(Boolean) });
+    onUpdateRule({
+      ...article,
+      title: draftTitle.trim() || article.title,
+      summary: draftSummary.trim(),
+      content: draftContent.trim(),
+      tags: draftTags.split(",").map((tag) => tag.trim()).filter(Boolean),
+    });
     setIsEditing(false);
   }
 
@@ -728,7 +878,19 @@ function PlayerPanel({ player, canClose, onClose, onUpdatePlayer }: { player: Pl
   }, [player]);
 
   function saveChanges() {
-    onUpdatePlayer({ ...player, characterName: draftName.trim() || player.characterName, playerName: draftPlayerName.trim() || player.playerName, role: draftRole.trim(), tier: draftTier.trim(), concept: draftConcept.trim(), status: parseLabeledValues(draftStatus), attributes: parseLabeledValues(draftAttributes), resources: parseLabeledValues(draftResources), abilities: parseAbilities(draftAbilities), notes: splitTextIntoList(draftNotes) });
+    onUpdatePlayer({
+      ...player,
+      characterName: draftName.trim() || player.characterName,
+      playerName: draftPlayerName.trim() || player.playerName,
+      role: draftRole.trim(),
+      tier: draftTier.trim(),
+      concept: draftConcept.trim(),
+      status: parseLabeledValues(draftStatus),
+      attributes: parseLabeledValues(draftAttributes),
+      resources: parseLabeledValues(draftResources),
+      abilities: parseAbilities(draftAbilities),
+      notes: splitTextIntoList(draftNotes),
+    });
     setIsEditing(false);
   }
 
