@@ -6,6 +6,7 @@ import {
   Edit3,
   FileText,
   Home,
+  Plus,
   RotateCcw,
   Save,
   ScrollText,
@@ -19,17 +20,13 @@ import {
 import type { ElementType, PointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  initialNpcSheets,
-  initialPlayerSheets,
-  initialRuleArticles,
-} from "@/data/systemRules";
 import type {
   LabeledValue,
   NpcSheet,
   OpenPanel,
   PlayerAbility,
   PlayerSheet,
+  RpgTable,
   RuleArticle,
   RuleCategory,
   RulebookData,
@@ -54,103 +51,42 @@ type SheetCategoryItem = {
 const PANEL_MIN_WIDTH = 320;
 const MAX_OPEN_PANELS = 4;
 
+const defaultTable: RpgTable = {
+  id: "mesa-principal",
+  name: "Mesa Principal",
+  description: "Dados antigos preservados automaticamente.",
+};
+
 const initialData: RulebookData = {
-  rules: initialRuleArticles,
-  npcs: initialNpcSheets,
-  players: initialPlayerSheets,
+  tables: [defaultTable],
+  activeTableId: defaultTable.id,
+  rules: [],
+  npcs: [],
+  players: [],
 };
 
 const menuItems: MenuItem[] = [
-  {
-    id: "combate",
-    label: "Combate",
-    description: "Rodadas, iniciativa e turno",
-    icon: Swords,
-  },
-  {
-    id: "testes",
-    label: "Testes",
-    description: "D20, dificuldade, vantagem e crítico",
-    icon: ScrollText,
-  },
-  {
-    id: "atributos",
-    label: "Atributos",
-    description: "Escala e usos dos atributos",
-    icon: ShieldAlert,
-  },
-  {
-    id: "defesa-dano",
-    label: "Defesa e Dano",
-    description: "Ataques, redução e contrajogo",
-    icon: ShieldAlert,
-  },
-  {
-    id: "personagem",
-    label: "Personagem",
-    description: "Criação e raças jogáveis",
-    icon: UserRound,
-  },
-  {
-    id: "progressao",
-    label: "Progressão",
-    description: "Evolução por raça e recursos",
-    icon: BookOpen,
-  },
-  {
-    id: "habilidades",
-    label: "Habilidades",
-    description: "Escalas, custos e balanceamento",
-    icon: WandSparkles,
-  },
-  {
-    id: "armaduras",
-    label: "Armaduras",
-    description: "Armaduras Kaiju e módulos",
-    icon: FileText,
-  },
-  {
-    id: "regras-da-casa",
-    label: "Regras da Casa",
-    description: "Decisões próprias da mesa",
-    icon: BookOpen,
-  },
+  { id: "combate", label: "Combate", description: "Rodadas, iniciativa e turno", icon: Swords },
+  { id: "testes", label: "Testes", description: "D20, dificuldade, vantagem e crítico", icon: ScrollText },
+  { id: "atributos", label: "Atributos", description: "Escala e usos dos atributos", icon: ShieldAlert },
+  { id: "defesa-dano", label: "Defesa e Dano", description: "Ataques, redução e contrajogo", icon: ShieldAlert },
+  { id: "personagem", label: "Personagem", description: "Criação e raças jogáveis", icon: UserRound },
+  { id: "progressao", label: "Progressão", description: "Evolução por raça e recursos", icon: BookOpen },
+  { id: "habilidades", label: "Habilidades", description: "Escalas, custos e balanceamento", icon: WandSparkles },
+  { id: "armaduras", label: "Armaduras", description: "Armaduras Kaiju e módulos", icon: FileText },
+  { id: "regras-da-casa", label: "Regras da Casa", description: "Decisões próprias da mesa", icon: BookOpen },
 ];
 
 const sheetCategories: SheetCategoryItem[] = [
-  {
-    id: "players",
-    label: "Players",
-    description: "Fichas dos jogadores",
-  },
-  {
-    id: "criminosos",
-    label: "Criminosos",
-    description: "NPCs presos e inimigos simples",
-  },
-  {
-    id: "policia-umck",
-    label: "Polícia / UMCK",
-    description: "Guardas, oficiais e agentes",
-  },
-  {
-    id: "ameacas-pesadas",
-    label: "Ameaças Pesadas",
-    description: "Tanks, armaduras e mini-bosses",
-  },
-  {
-    id: "simbiontes",
-    label: "Simbiontes",
-    description: "Organismos simbiontes e boss",
-  },
+  { id: "players", label: "Players", description: "Fichas dos jogadores" },
+  { id: "criminosos", label: "Criminosos", description: "NPCs presos e inimigos simples" },
+  { id: "policia-umck", label: "Polícia / UMCK", description: "Guardas, oficiais e agentes" },
+  { id: "ameacas-pesadas", label: "Ameaças Pesadas", description: "Tanks, armaduras e mini-bosses" },
+  { id: "simbiontes", label: "Simbiontes", description: "Organismos simbiontes e boss" },
 ];
 
 function normalizePanelSizes(amount: number) {
-  if (amount <= 0) {
-    return [];
-  }
-
-  return Array.from({ length: amount }, () => 100 / amount);
+  return amount <= 0 ? [] : Array.from({ length: amount }, () => 100 / amount);
 }
 
 function splitTextIntoList(value: string) {
@@ -167,36 +103,21 @@ function labeledValuesToText(values: LabeledValue[]) {
 function parseLabeledValues(value: string): LabeledValue[] {
   return splitTextIntoList(value).map((line) => {
     const [label, ...valueParts] = line.split(":");
-
-    return {
-      label: label?.trim() || "Campo",
-      value: valueParts.join(":").trim() || "-",
-    };
+    return { label: label?.trim() || "Campo", value: valueParts.join(":").trim() || "-" };
   });
 }
 
 function abilitiesToText(abilities: PlayerAbility[]) {
   return abilities
     .map((ability) =>
-      [
-        ability.name,
-        ability.type,
-        ability.scale,
-        ability.cost,
-        ability.test,
-        ability.effect,
-        ability.limit ?? "",
-      ].join(" | ")
+      [ability.name, ability.type, ability.scale, ability.cost, ability.test, ability.effect, ability.limit ?? ""].join(" | ")
     )
     .join("\n");
 }
 
 function parseAbilities(value: string): PlayerAbility[] {
   return splitTextIntoList(value).map((line) => {
-    const [name, type, scale, cost, test, effect, limit] = line
-      .split("|")
-      .map((part) => part.trim());
-
+    const [name, type, scale, cost, test, effect, limit] = line.split("|").map((part) => part.trim());
     return {
       name: name || "Habilidade",
       type: type || "—",
@@ -209,81 +130,82 @@ function parseAbilities(value: string): PlayerAbility[] {
   });
 }
 
+function firstRulePanel(rules: RuleArticle[]): OpenPanel[] {
+  const firstRule = rules[0];
+  return firstRule ? [{ id: `rule:${firstRule.id}`, type: "rule", refId: firstRule.id, title: firstRule.title }] : [];
+}
+
+function firstSheetPanel(players: PlayerSheet[], npcs: NpcSheet[]): OpenPanel[] {
+  const firstPlayer = players[0];
+  const firstNpc = npcs[0];
+
+  if (firstPlayer) {
+    return [{ id: `player:${firstPlayer.id}`, type: "player", refId: firstPlayer.id, title: firstPlayer.characterName }];
+  }
+
+  if (firstNpc) {
+    return [{ id: `npc:${firstNpc.id}`, type: "npc", refId: firstNpc.id, title: firstNpc.name }];
+  }
+
+  return [];
+}
+
 export function SystemWorkspace() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("system");
   const [rulebookData, setRulebookData] = useState<RulebookData>(initialData);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState("Carregando banco local...");
-  const [systemPanels, setSystemPanels] = useState<OpenPanel[]>([
-    {
-      id: "rule:combate-rodadas",
-      type: "rule",
-      refId: "combate-rodadas",
-      title: "Combate: rodadas, iniciativa e turno",
-    },
-  ]);
-  const [sheetPanels, setSheetPanels] = useState<OpenPanel[]>([
-    {
-      id: "player:erick-medina-andrade",
-      type: "player",
-      refId: "erick-medina-andrade",
-      title: "Erick Medina Andrade",
-    },
-  ]);
-  const [systemPanelSizes, setSystemPanelSizes] = useState<number[]>([100]);
-  const [sheetPanelSizes, setSheetPanelSizes] = useState<number[]>([100]);
+  const [systemPanels, setSystemPanels] = useState<OpenPanel[]>([]);
+  const [sheetPanels, setSheetPanels] = useState<OpenPanel[]>([]);
+  const [systemPanelSizes, setSystemPanelSizes] = useState<number[]>([]);
+  const [sheetPanelSizes, setSheetPanelSizes] = useState<number[]>([]);
 
   const openPanels = activeTab === "system" ? systemPanels : sheetPanels;
   const panelSizes = activeTab === "system" ? systemPanelSizes : sheetPanelSizes;
-  const setActivePanels = activeTab === "system" ? setSystemPanels : setSheetPanels;
-  const setActivePanelSizes = activeTab === "system" ? setSystemPanelSizes : setSheetPanelSizes;
+  const activeTable = rulebookData.tables.find((table) => table.id === rulebookData.activeTableId) ?? rulebookData.tables[0] ?? defaultTable;
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadDatabase() {
-      try {
-        const response = await fetch("/api/rulebook", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error("Falha ao carregar o banco local.");
-        }
-
-        const data = (await response.json()) as RulebookData;
-
-        if (isMounted) {
-          setRulebookData({
-            rules: data.rules ?? [],
-            npcs: data.npcs ?? [],
-            players: data.players ?? [],
-          });
-          setSaveStatus("Banco local conectado");
-        }
-      } catch {
-        if (isMounted) {
-          setSaveStatus("Usando dados iniciais; verifique o servidor/API local");
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadDatabase();
-
-    return () => {
-      isMounted = false;
-    };
+    loadTable();
   }, []);
 
-  const openedPanelIds = useMemo(
-    () => new Set(openPanels.map((panel) => panel.id)),
-    [openPanels]
-  );
+  const openedPanelIds = useMemo(() => new Set(openPanels.map((panel) => panel.id)), [openPanels]);
+
+  async function loadTable(tableId?: string) {
+    setIsLoading(true);
+    setSaveStatus("Carregando mesa...");
+
+    try {
+      const query = tableId ? `?tableId=${encodeURIComponent(tableId)}` : "";
+      const response = await fetch(`/api/rulebook${query}`, { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("Falha ao carregar o banco local.");
+      }
+
+      const data = (await response.json()) as RulebookData;
+      const nextData: RulebookData = {
+        tables: data.tables?.length ? data.tables : [defaultTable],
+        activeTableId: data.activeTableId || tableId || defaultTable.id,
+        rules: data.rules ?? [],
+        npcs: data.npcs ?? [],
+        players: data.players ?? [],
+      };
+
+      setRulebookData(nextData);
+      const nextSystemPanels = firstRulePanel(nextData.rules);
+      const nextSheetPanels = firstSheetPanel(nextData.players, nextData.npcs);
+      setSystemPanels(nextSystemPanels);
+      setSheetPanels(nextSheetPanels);
+      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
+      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
+      setSaveStatus("Banco local conectado");
+    } catch {
+      setSaveStatus("Erro ao carregar banco local");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   async function persistData(nextData: RulebookData) {
     setRulebookData(nextData);
@@ -292,9 +214,7 @@ export function SystemWorkspace() {
     try {
       const response = await fetch("/api/rulebook", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(nextData),
       });
 
@@ -304,6 +224,8 @@ export function SystemWorkspace() {
 
       const savedData = (await response.json()) as RulebookData;
       setRulebookData({
+        tables: savedData.tables ?? nextData.tables,
+        activeTableId: savedData.activeTableId ?? nextData.activeTableId,
         rules: savedData.rules ?? nextData.rules,
         npcs: savedData.npcs ?? nextData.npcs,
         players: savedData.players ?? nextData.players,
@@ -314,68 +236,72 @@ export function SystemWorkspace() {
     }
   }
 
-  function openRuleByCategory(category: RuleCategory) {
-    const article = rulebookData.rules.find((item) => item.category === category);
+  async function createNewTable() {
+    const name = window.prompt("Nome da nova mesa:", "Nova mesa");
 
-    if (!article) {
+    if (!name?.trim()) {
       return;
     }
 
-    openRule(article.id);
+    const description = window.prompt("Descrição curta da mesa:", "Mesa criada para uma nova campanha.") ?? "";
+    setSaveStatus("Criando nova mesa...");
+
+    try {
+      const response = await fetch("/api/rulebook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create-table", name, description }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao criar mesa.");
+      }
+
+      const data = (await response.json()) as RulebookData;
+      setActiveTab("system");
+      setRulebookData(data);
+      const nextSystemPanels = firstRulePanel(data.rules ?? []);
+      const nextSheetPanels = firstSheetPanel(data.players ?? [], data.npcs ?? []);
+      setSystemPanels(nextSystemPanels);
+      setSheetPanels(nextSheetPanels);
+      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
+      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
+      setSaveStatus("Nova mesa criada");
+    } catch {
+      setSaveStatus("Erro ao criar mesa");
+    }
+  }
+
+  function openRuleByCategory(category: RuleCategory) {
+    const article = rulebookData.rules.find((item) => item.category === category);
+    if (article) openRule(article.id);
   }
 
   function openRule(articleId: string) {
     const article = rulebookData.rules.find((item) => item.id === articleId);
+    if (!article) return;
 
-    if (!article) {
-      return;
-    }
-
-    addSystemPanel({
-      id: `rule:${article.id}`,
-      type: "rule",
-      refId: article.id,
-      title: article.title,
-    });
+    addSystemPanel({ id: `rule:${article.id}`, type: "rule", refId: article.id, title: article.title });
   }
 
   function openPlayer(playerId: string) {
     const player = rulebookData.players.find((item) => item.id === playerId);
+    if (!player) return;
 
-    if (!player) {
-      return;
-    }
-
-    addSheetPanel({
-      id: `player:${player.id}`,
-      type: "player",
-      refId: player.id,
-      title: player.characterName,
-    });
+    addSheetPanel({ id: `player:${player.id}`, type: "player", refId: player.id, title: player.characterName });
   }
 
   function openNpc(npcId: string) {
     const npc = rulebookData.npcs.find((item) => item.id === npcId);
+    if (!npc) return;
 
-    if (!npc) {
-      return;
-    }
-
-    addSheetPanel({
-      id: `npc:${npc.id}`,
-      type: "npc",
-      refId: npc.id,
-      title: npc.name,
-    });
+    addSheetPanel({ id: `npc:${npc.id}`, type: "npc", refId: npc.id, title: npc.name });
   }
 
   function addSystemPanel(panelToOpen: OpenPanel) {
     setActiveTab("system");
     setSystemPanels((currentPanels) => {
-      if (currentPanels.some((panel) => panel.id === panelToOpen.id)) {
-        return currentPanels;
-      }
-
+      if (currentPanels.some((panel) => panel.id === panelToOpen.id)) return currentPanels;
       const nextPanels = [...currentPanels, panelToOpen].slice(-MAX_OPEN_PANELS);
       setSystemPanelSizes(normalizePanelSizes(nextPanels.length));
       return nextPanels;
@@ -385,10 +311,7 @@ export function SystemWorkspace() {
   function addSheetPanel(panelToOpen: OpenPanel) {
     setActiveTab("sheets");
     setSheetPanels((currentPanels) => {
-      if (currentPanels.some((panel) => panel.id === panelToOpen.id)) {
-        return currentPanels;
-      }
-
+      if (currentPanels.some((panel) => panel.id === panelToOpen.id)) return currentPanels;
       const nextPanels = [...currentPanels, panelToOpen].slice(-MAX_OPEN_PANELS);
       setSheetPanelSizes(normalizePanelSizes(nextPanels.length));
       return nextPanels;
@@ -396,137 +319,75 @@ export function SystemWorkspace() {
   }
 
   function closePanel(panelId: string) {
-    setActivePanels((currentPanels) => {
-      if (currentPanels.length === 1) {
-        return currentPanels;
-      }
+    if (activeTab === "system") {
+      setSystemPanels((currentPanels) => {
+        if (currentPanels.length <= 1) return currentPanels;
+        const nextPanels = currentPanels.filter((panel) => panel.id !== panelId);
+        setSystemPanelSizes(normalizePanelSizes(nextPanels.length));
+        return nextPanels;
+      });
+      return;
+    }
 
+    setSheetPanels((currentPanels) => {
+      if (currentPanels.length <= 1) return currentPanels;
       const nextPanels = currentPanels.filter((panel) => panel.id !== panelId);
-      setActivePanelSizes(normalizePanelSizes(nextPanels.length));
+      setSheetPanelSizes(normalizePanelSizes(nextPanels.length));
       return nextPanels;
     });
   }
 
   function updateRule(updatedRule: RuleArticle) {
-    const nextData = {
-      ...rulebookData,
-      rules: rulebookData.rules.map((rule) =>
-        rule.id === updatedRule.id ? updatedRule : rule
-      ),
-    };
-
-    setSystemPanels((currentPanels) =>
-      currentPanels.map((panel) =>
-        panel.type === "rule" && panel.refId === updatedRule.id
-          ? { ...panel, title: updatedRule.title }
-          : panel
-      )
-    );
-
+    const nextData = { ...rulebookData, rules: rulebookData.rules.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule)) };
+    setSystemPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "rule" && panel.refId === updatedRule.id ? { ...panel, title: updatedRule.title } : panel)));
     persistData(nextData);
   }
 
   function updateNpc(updatedNpc: NpcSheet) {
-    const nextData = {
-      ...rulebookData,
-      npcs: rulebookData.npcs.map((npc) =>
-        npc.id === updatedNpc.id ? updatedNpc : npc
-      ),
-    };
-
-    setSheetPanels((currentPanels) =>
-      currentPanels.map((panel) =>
-        panel.type === "npc" && panel.refId === updatedNpc.id
-          ? { ...panel, title: updatedNpc.name }
-          : panel
-      )
-    );
-
+    const nextData = { ...rulebookData, npcs: rulebookData.npcs.map((npc) => (npc.id === updatedNpc.id ? updatedNpc : npc)) };
+    setSheetPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "npc" && panel.refId === updatedNpc.id ? { ...panel, title: updatedNpc.name } : panel)));
     persistData(nextData);
   }
 
   function updatePlayer(updatedPlayer: PlayerSheet) {
-    const nextData = {
-      ...rulebookData,
-      players: rulebookData.players.map((player) =>
-        player.id === updatedPlayer.id ? updatedPlayer : player
-      ),
-    };
-
-    setSheetPanels((currentPanels) =>
-      currentPanels.map((panel) =>
-        panel.type === "player" && panel.refId === updatedPlayer.id
-          ? { ...panel, title: updatedPlayer.characterName }
-          : panel
-      )
-    );
-
+    const nextData = { ...rulebookData, players: rulebookData.players.map((player) => (player.id === updatedPlayer.id ? updatedPlayer : player)) };
+    setSheetPanels((currentPanels) => currentPanels.map((panel) => (panel.type === "player" && panel.refId === updatedPlayer.id ? { ...panel, title: updatedPlayer.characterName } : panel)));
     persistData(nextData);
   }
 
   async function resetAllContent() {
-    const confirmed = window.confirm(
-      "Deseja restaurar os inserts iniciais do Kaiju RPG? Suas edições atuais no banco local serão substituídas."
-    );
+    const confirmed = window.confirm(`Deseja restaurar os inserts iniciais apenas da mesa "${activeTable.name}"? As outras mesas não serão alteradas.`);
+    if (!confirmed) return;
 
-    if (!confirmed) {
-      return;
-    }
-
-    setSaveStatus("Restaurando inserts iniciais...");
+    setSaveStatus("Restaurando inserts da mesa atual...");
 
     try {
       const response = await fetch("/api/rulebook", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "reset-seed" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-seed", tableId: rulebookData.activeTableId }),
       });
 
-      if (!response.ok) {
-        throw new Error("Erro ao restaurar seed.");
-      }
+      if (!response.ok) throw new Error("Erro ao restaurar seed.");
 
       const data = (await response.json()) as RulebookData;
-      setRulebookData({
-        rules: data.rules ?? [],
-        npcs: data.npcs ?? [],
-        players: data.players ?? [],
-      });
-      setSystemPanels([
-        {
-          id: "rule:combate-rodadas",
-          type: "rule",
-          refId: "combate-rodadas",
-          title: "Combate: rodadas, iniciativa e turno",
-        },
-      ]);
-      setSheetPanels([
-        {
-          id: "player:erick-medina-andrade",
-          type: "player",
-          refId: "erick-medina-andrade",
-          title: "Erick Medina Andrade",
-        },
-      ]);
-      setSystemPanelSizes([100]);
-      setSheetPanelSizes([100]);
-      setActiveTab("system");
-      setSaveStatus("Inserts iniciais restaurados");
+      setRulebookData(data);
+      const nextSystemPanels = firstRulePanel(data.rules ?? []);
+      const nextSheetPanels = firstSheetPanel(data.players ?? [], data.npcs ?? []);
+      setSystemPanels(nextSystemPanels);
+      setSheetPanels(nextSheetPanels);
+      setSystemPanelSizes(normalizePanelSizes(nextSystemPanels.length));
+      setSheetPanelSizes(normalizePanelSizes(nextSheetPanels.length));
+      setSaveStatus("Mesa atual restaurada");
     } catch {
-      setSaveStatus("Erro ao restaurar inserts iniciais");
+      setSaveStatus("Erro ao restaurar mesa atual");
     }
   }
 
   function startResize(event: PointerEvent<HTMLDivElement>, dividerIndex: number) {
     event.preventDefault();
-
     const container = workspaceRef.current;
-
-    if (!container) {
-      return;
-    }
+    if (!container) return;
 
     const startX = event.clientX;
     const startSizes = [...panelSizes];
@@ -534,12 +395,10 @@ export function SystemWorkspace() {
     const minPercent = Math.min(40, (PANEL_MIN_WIDTH / containerWidth) * 100);
 
     function handlePointerMove(pointerEvent: globalThis.PointerEvent) {
-      const deltaX = pointerEvent.clientX - startX;
-      const deltaPercent = (deltaX / containerWidth) * 100;
+      const deltaPercent = ((pointerEvent.clientX - startX) / containerWidth) * 100;
       const leftStart = startSizes[dividerIndex];
       const rightStart = startSizes[dividerIndex + 1];
       const combinedSize = leftStart + rightStart;
-
       let nextLeftSize = leftStart + deltaPercent;
       let nextRightSize = rightStart - deltaPercent;
 
@@ -553,7 +412,17 @@ export function SystemWorkspace() {
         nextLeftSize = combinedSize - minPercent;
       }
 
-      setActivePanelSizes((currentSizes) => {
+      if (activeTab === "system") {
+        setSystemPanelSizes((currentSizes) => {
+          const nextSizes = [...currentSizes];
+          nextSizes[dividerIndex] = nextLeftSize;
+          nextSizes[dividerIndex + 1] = nextRightSize;
+          return nextSizes;
+        });
+        return;
+      }
+
+      setSheetPanelSizes((currentSizes) => {
         const nextSizes = [...currentSizes];
         nextSizes[dividerIndex] = nextLeftSize;
         nextSizes[dividerIndex + 1] = nextRightSize;
@@ -572,50 +441,43 @@ export function SystemWorkspace() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="grid h-16 grid-cols-[1fr_auto_1fr] items-center border-b border-zinc-800 bg-zinc-950 px-6">
+      <header className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-zinc-800 bg-zinc-950 px-6 py-3">
         <div>
           <h1 className="text-xl font-bold text-amber-400">Mesa do Mestre</h1>
-          <p className="text-xs text-zinc-500">
-            Biblioteca editável do Kaiju RPG com banco SQLite local
-          </p>
+          <p className="text-xs text-zinc-500">Mesa atual: {activeTable.name}</p>
         </div>
 
         <div className="flex rounded-xl border border-zinc-800 bg-zinc-900 p-1">
-          <button
-            onClick={() => setActiveTab("system")}
-            className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${
-              activeTab === "system"
-                ? "bg-amber-500 text-zinc-950"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            }`}
-          >
-            <BookOpen className="h-4 w-4" />
-            Sistema
-          </button>
-          <button
-            onClick={() => setActiveTab("sheets")}
-            className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${
-              activeTab === "sheets"
-                ? "bg-amber-500 text-zinc-950"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            Fichas
-          </button>
+          <TabButton active={activeTab === "system"} icon={BookOpen} label="Sistema" onClick={() => setActiveTab("system")} />
+          <TabButton active={activeTab === "sheets"} icon={Users} label="Fichas" onClick={() => setActiveTab("sheets")} />
         </div>
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <select
+            value={rulebookData.activeTableId}
+            onChange={(event) => loadTable(event.target.value)}
+            className="max-w-48 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 outline-none transition hover:border-amber-500/60"
+          >
+            {rulebookData.tables.map((table) => (
+              <option key={table.id} value={table.id}>
+                {table.name}
+              </option>
+            ))}
+          </select>
+
+          <button onClick={createNewTable} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300">
+            <Plus className="h-3.5 w-3.5" />
+            Nova mesa
+          </button>
+
           <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-300">
             <Database className="h-3.5 w-3.5" />
             {isLoading ? "Carregando..." : saveStatus}
           </span>
-          <button
-            onClick={resetAllContent}
-            className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-red-500/60 hover:text-red-300"
-          >
+
+          <button onClick={resetAllContent} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-red-500/60 hover:text-red-300">
             <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar inserts
+            Restaurar mesa
           </button>
         </div>
       </header>
@@ -623,59 +485,43 @@ export function SystemWorkspace() {
       <div className="grid h-[calc(100vh-4rem)] grid-cols-[320px_1fr]">
         <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/70 p-4">
           {activeTab === "system" ? (
-            <SystemSidebar
-              rules={rulebookData.rules}
-              openedPanelIds={openedPanelIds}
-              onOpenRuleByCategory={openRuleByCategory}
-            />
+            <SystemSidebar rules={rulebookData.rules} openedPanelIds={openedPanelIds} onOpenRuleByCategory={openRuleByCategory} />
           ) : (
-            <SheetsSidebar
-              players={rulebookData.players}
-              npcs={rulebookData.npcs}
-              openedPanelIds={openedPanelIds}
-              onOpenPlayer={openPlayer}
-              onOpenNpc={openNpc}
-            />
+            <SheetsSidebar players={rulebookData.players} npcs={rulebookData.npcs} openedPanelIds={openedPanelIds} onOpenPlayer={openPlayer} onOpenNpc={openNpc} />
           )}
         </aside>
 
         <section className="overflow-hidden bg-zinc-950 p-4">
           <div ref={workspaceRef} className="flex h-full w-full overflow-x-auto">
-            {openPanels.map((panel, index) => (
-              <div key={panel.id} className="contents">
-                <div
-                  className="h-full shrink-0"
-                  style={{
-                    flexBasis: `${panelSizes[index] ?? 100 / openPanels.length}%`,
-                    flexGrow: 0,
-                    flexShrink: 0,
-                    minWidth: PANEL_MIN_WIDTH,
-                  }}
-                >
-                  <WorkspacePanel
-                    panel={panel}
-                    rules={rulebookData.rules}
-                    npcs={rulebookData.npcs}
-                    players={rulebookData.players}
-                    canClose={openPanels.length > 1}
-                    onClose={() => closePanel(panel.id)}
-                    onOpenRule={openRule}
-                    onUpdateRule={updateRule}
-                    onUpdateNpc={updateNpc}
-                    onUpdatePlayer={updatePlayer}
-                  />
-                </div>
-
-                {index < openPanels.length - 1 && (
+            {openPanels.length === 0 ? (
+              <EmptyPanel activeTab={activeTab} />
+            ) : (
+              openPanels.map((panel, index) => (
+                <div key={panel.id} className="contents">
                   <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    onPointerDown={(event) => startResize(event, index)}
-                    className="mx-2 h-full w-1 shrink-0 cursor-col-resize rounded-full bg-zinc-800 transition hover:bg-amber-500"
-                  />
-                )}
-              </div>
-            ))}
+                    className="h-full shrink-0"
+                    style={{ flexBasis: `${panelSizes[index] ?? 100 / openPanels.length}%`, flexGrow: 0, flexShrink: 0, minWidth: PANEL_MIN_WIDTH }}
+                  >
+                    <WorkspacePanel
+                      panel={panel}
+                      rules={rulebookData.rules}
+                      npcs={rulebookData.npcs}
+                      players={rulebookData.players}
+                      canClose={openPanels.length > 1}
+                      onClose={() => closePanel(panel.id)}
+                      onOpenRule={openRule}
+                      onUpdateRule={updateRule}
+                      onUpdateNpc={updateNpc}
+                      onUpdatePlayer={updatePlayer}
+                    />
+                  </div>
+
+                  {index < openPanels.length - 1 && (
+                    <div role="separator" aria-orientation="vertical" onPointerDown={(event) => startResize(event, index)} className="mx-2 h-full w-1 shrink-0 cursor-col-resize rounded-full bg-zinc-800 transition hover:bg-amber-500" />
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -683,15 +529,19 @@ export function SystemWorkspace() {
   );
 }
 
-function SystemSidebar({
-  rules,
-  openedPanelIds,
-  onOpenRuleByCategory,
-}: {
-  rules: RuleArticle[];
-  openedPanelIds: Set<string>;
-  onOpenRuleByCategory: (category: RuleCategory) => void;
-}) {
+function TabButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: ElementType; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition ${active ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"}`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function SystemSidebar({ rules, openedPanelIds, onOpenRuleByCategory }: { rules: RuleArticle[]; openedPanelIds: Set<string>; onOpenRuleByCategory: (category: RuleCategory) => void }) {
   return (
     <>
       <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
@@ -706,15 +556,7 @@ function SystemSidebar({
           const isOpen = article ? openedPanelIds.has(`rule:${article.id}`) : false;
 
           return (
-            <button
-              key={item.id}
-              onClick={() => onOpenRuleByCategory(item.id)}
-              className={`w-full rounded-lg border px-3 py-3 text-left transition ${
-                isOpen
-                  ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
-                  : "border-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-amber-300"
-              }`}
-            >
+            <button key={item.id} onClick={() => onOpenRuleByCategory(item.id)} className={`w-full rounded-lg border px-3 py-3 text-left transition ${isOpen ? "border-amber-500/50 bg-amber-500/10 text-amber-200" : "border-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-amber-300"}`}>
               <span className="flex items-center gap-3 text-sm font-medium">
                 <Icon className="h-4 w-4" />
                 {item.label}
@@ -724,30 +566,11 @@ function SystemSidebar({
           );
         })}
       </nav>
-
-      <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
-        <p className="font-semibold text-amber-300">Aba Sistema</p>
-        <p className="mt-1">
-          Aqui ficam apenas regras e referências do sistema. Abra várias regras e ajuste os divisores.
-        </p>
-      </div>
     </>
   );
 }
 
-function SheetsSidebar({
-  players,
-  npcs,
-  openedPanelIds,
-  onOpenPlayer,
-  onOpenNpc,
-}: {
-  players: PlayerSheet[];
-  npcs: NpcSheet[];
-  openedPanelIds: Set<string>;
-  onOpenPlayer: (playerId: string) => void;
-  onOpenNpc: (npcId: string) => void;
-}) {
+function SheetsSidebar({ players, npcs, openedPanelIds, onOpenPlayer, onOpenNpc }: { players: PlayerSheet[]; npcs: NpcSheet[]; openedPanelIds: Set<string>; onOpenPlayer: (playerId: string) => void; onOpenNpc: (npcId: string) => void }) {
   return (
     <>
       <div className="mb-6 flex items-center gap-2 text-sm font-semibold text-zinc-300">
@@ -757,69 +580,31 @@ function SheetsSidebar({
 
       <div className="space-y-6">
         <SheetGroup title="Players" description="Fichas dos jogadores">
-          {players.map((player) => {
-            const isOpen = openedPanelIds.has(`player:${player.id}`);
-
-            return (
-              <SheetButton
-                key={player.id}
-                isOpen={isOpen}
-                title={player.characterName}
-                description={player.role}
-                onClick={() => onOpenPlayer(player.id)}
-              />
-            );
-          })}
+          {players.map((player) => (
+            <SheetButton key={player.id} isOpen={openedPanelIds.has(`player:${player.id}`)} title={player.characterName} description={player.role} onClick={() => onOpenPlayer(player.id)} />
+          ))}
         </SheetGroup>
 
         {sheetCategories
           .filter((category) => category.id !== "players")
           .map((category) => {
             const categoryNpcs = npcs.filter((npc) => npc.category === category.id);
-
-            if (categoryNpcs.length === 0) {
-              return null;
-            }
+            if (categoryNpcs.length === 0) return null;
 
             return (
               <SheetGroup key={category.id} title={category.label} description={category.description}>
-                {categoryNpcs.map((npc) => {
-                  const isOpen = openedPanelIds.has(`npc:${npc.id}`);
-
-                  return (
-                    <SheetButton
-                      key={npc.id}
-                      isOpen={isOpen}
-                      title={npc.name}
-                      description={npc.role}
-                      onClick={() => onOpenNpc(npc.id)}
-                    />
-                  );
-                })}
+                {categoryNpcs.map((npc) => (
+                  <SheetButton key={npc.id} isOpen={openedPanelIds.has(`npc:${npc.id}`)} title={npc.name} description={npc.role} onClick={() => onOpenNpc(npc.id)} />
+                ))}
               </SheetGroup>
             );
           })}
-      </div>
-
-      <div className="mt-8 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
-        <p className="font-semibold text-amber-300">Aba Fichas</p>
-        <p className="mt-1">
-          Aqui ficam apenas fichas. Abra mais de uma ficha e compare usando tela dividida.
-        </p>
       </div>
     </>
   );
 }
 
-function SheetGroup({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
+function SheetGroup({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <section>
       <div className="mb-2">
@@ -831,115 +616,42 @@ function SheetGroup({
   );
 }
 
-function SheetButton({
-  isOpen,
-  title,
-  description,
-  onClick,
-}: {
-  isOpen: boolean;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
+function SheetButton({ isOpen, title, description, onClick }: { isOpen: boolean; title: string; description: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className={`w-full rounded-md border p-3 text-left text-sm transition ${
-        isOpen
-          ? "border-amber-500/50 bg-amber-500/10"
-          : "border-zinc-800 bg-zinc-950 hover:border-amber-500/40"
-      }`}
-    >
+    <button onClick={onClick} className={`w-full rounded-md border p-3 text-left text-sm transition ${isOpen ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950 hover:border-amber-500/40"}`}>
       <p className="font-medium text-zinc-200">{title}</p>
       <p className="line-clamp-2 text-xs text-zinc-500">{description}</p>
     </button>
   );
 }
 
-function WorkspacePanel({
-  panel,
-  rules,
-  npcs,
-  players,
-  canClose,
-  onClose,
-  onOpenRule,
-  onUpdateRule,
-  onUpdateNpc,
-  onUpdatePlayer,
-}: {
-  panel: OpenPanel;
-  rules: RuleArticle[];
-  npcs: NpcSheet[];
-  players: PlayerSheet[];
-  canClose: boolean;
-  onClose: () => void;
-  onOpenRule: (articleId: string) => void;
-  onUpdateRule: (rule: RuleArticle) => void;
-  onUpdateNpc: (npc: NpcSheet) => void;
-  onUpdatePlayer: (player: PlayerSheet) => void;
-}) {
+function EmptyPanel({ activeTab }: { activeTab: WorkspaceTab }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 text-sm text-zinc-500">
+      {activeTab === "system" ? "Nenhuma regra aberta nesta mesa." : "Nenhuma ficha aberta nesta mesa."}
+    </div>
+  );
+}
+
+function WorkspacePanel({ panel, rules, npcs, players, canClose, onClose, onOpenRule, onUpdateRule, onUpdateNpc, onUpdatePlayer }: { panel: OpenPanel; rules: RuleArticle[]; npcs: NpcSheet[]; players: PlayerSheet[]; canClose: boolean; onClose: () => void; onOpenRule: (articleId: string) => void; onUpdateRule: (rule: RuleArticle) => void; onUpdateNpc: (npc: NpcSheet) => void; onUpdatePlayer: (player: PlayerSheet) => void }) {
   if (panel.type === "rule") {
     const article = rules.find((item) => item.id === panel.refId);
-
-    if (!article) {
-      return null;
-    }
-
-    return (
-      <RulePanel
-        article={article}
-        relatedRules={rules.filter((item) => item.id !== article.id).slice(0, 4)}
-        canClose={canClose}
-        onClose={onClose}
-        onOpenRule={onOpenRule}
-        onUpdateRule={onUpdateRule}
-      />
-    );
+    if (!article) return null;
+    return <RulePanel article={article} relatedRules={rules.filter((item) => item.id !== article.id).slice(0, 4)} canClose={canClose} onClose={onClose} onOpenRule={onOpenRule} onUpdateRule={onUpdateRule} />;
   }
 
   if (panel.type === "player") {
     const player = players.find((item) => item.id === panel.refId);
-
-    if (!player) {
-      return null;
-    }
-
-    return (
-      <PlayerPanel
-        player={player}
-        canClose={canClose}
-        onClose={onClose}
-        onUpdatePlayer={onUpdatePlayer}
-      />
-    );
+    if (!player) return null;
+    return <PlayerPanel player={player} canClose={canClose} onClose={onClose} onUpdatePlayer={onUpdatePlayer} />;
   }
 
   const npc = npcs.find((item) => item.id === panel.refId);
-
-  if (!npc) {
-    return null;
-  }
-
+  if (!npc) return null;
   return <NpcPanel npc={npc} canClose={canClose} onClose={onClose} onUpdateNpc={onUpdateNpc} />;
 }
 
-function RulePanel({
-  article,
-  relatedRules,
-  canClose,
-  onClose,
-  onOpenRule,
-  onUpdateRule,
-}: {
-  article: RuleArticle;
-  relatedRules: RuleArticle[];
-  canClose: boolean;
-  onClose: () => void;
-  onOpenRule: (articleId: string) => void;
-  onUpdateRule: (rule: RuleArticle) => void;
-}) {
+function RulePanel({ article, relatedRules, canClose, onClose, onOpenRule, onUpdateRule }: { article: RuleArticle; relatedRules: RuleArticle[]; canClose: boolean; onClose: () => void; onOpenRule: (articleId: string) => void; onUpdateRule: (rule: RuleArticle) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(article.title);
   const [draftSummary, setDraftSummary] = useState(article.summary);
@@ -955,17 +667,7 @@ function RulePanel({
   }, [article.id, article.title, article.summary, article.content, article.tags]);
 
   function saveChanges() {
-    onUpdateRule({
-      ...article,
-      title: draftTitle.trim() || article.title,
-      summary: draftSummary.trim(),
-      content: draftContent.trim(),
-      tags: draftTags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    });
-
+    onUpdateRule({ ...article, title: draftTitle.trim() || article.title, summary: draftSummary.trim(), content: draftContent.trim(), tags: draftTags.split(",").map((tag) => tag.trim()).filter(Boolean) });
     setIsEditing(false);
   }
 
@@ -974,85 +676,23 @@ function RulePanel({
       <header className="border-b border-zinc-800 p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            {isEditing ? (
-              <input
-                value={draftTitle}
-                onChange={(event) => setDraftTitle(event.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg font-semibold text-amber-300 outline-none focus:border-amber-500"
-              />
-            ) : (
-              <h2 className="truncate text-lg font-semibold text-amber-300">{article.title}</h2>
-            )}
-
-            {isEditing ? (
-              <textarea
-                value={draftSummary}
-                onChange={(event) => setDraftSummary(event.target.value)}
-                rows={2}
-                className="mt-2 w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-amber-500"
-              />
-            ) : (
-              <p className="mt-1 text-sm text-zinc-400">{article.summary}</p>
-            )}
+            {isEditing ? <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg font-semibold text-amber-300 outline-none focus:border-amber-500" /> : <h2 className="truncate text-lg font-semibold text-amber-300">{article.title}</h2>}
+            {isEditing ? <textarea value={draftSummary} onChange={(event) => setDraftSummary(event.target.value)} rows={2} className="mt-2 w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-amber-500" /> : <p className="mt-1 text-sm text-zinc-400">{article.summary}</p>}
           </div>
-
-          <PanelActions
-            isEditing={isEditing}
-            canClose={canClose}
-            onEdit={() => setIsEditing(true)}
-            onSave={saveChanges}
-            onCancel={() => setIsEditing(false)}
-            onClose={onClose}
-          />
+          <PanelActions isEditing={isEditing} canClose={canClose} onEdit={() => setIsEditing(true)} onSave={saveChanges} onCancel={() => setIsEditing(false)} onClose={onClose} />
         </div>
-
         <div className="mt-3 flex flex-wrap gap-2">
-          {isEditing ? (
-            <input
-              value={draftTags}
-              onChange={(event) => setDraftTags(event.target.value)}
-              placeholder="tags separadas por vírgula"
-              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-amber-500"
-            />
-          ) : (
-            article.tags.map((tag) => (
-              <span key={tag} className="rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
-                {tag}
-              </span>
-            ))
-          )}
+          {isEditing ? <input value={draftTags} onChange={(event) => setDraftTags(event.target.value)} placeholder="tags separadas por vírgula" className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-amber-500" /> : article.tags.map((tag) => <span key={tag} className="rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">{tag}</span>)}
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {isEditing ? (
-          <textarea
-            value={draftContent}
-            onChange={(event) => setDraftContent(event.target.value)}
-            className="min-h-[420px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm leading-7 text-zinc-200 outline-none focus:border-amber-500"
-          />
-        ) : (
-          <div className="space-y-4 text-sm leading-7 text-zinc-300">
-            {article.content.split("\n\n").map((paragraph, index) => (
-              <p key={`${article.id}-${index}`}>{paragraph}</p>
-            ))}
-          </div>
-        )}
+        {isEditing ? <textarea value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="min-h-[420px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm leading-7 text-zinc-200 outline-none focus:border-amber-500" /> : <div className="space-y-4 text-sm leading-7 text-zinc-300">{article.content.split("\n\n").map((paragraph, index) => <p key={`${article.id}-${index}`}>{paragraph}</p>)}</div>}
 
         {!isEditing && relatedRules.length > 0 && (
           <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <p className="mb-3 text-sm font-semibold text-amber-300">Regras relacionadas</p>
-            <div className="flex flex-wrap gap-2">
-              {relatedRules.map((related) => (
-                <button
-                  key={related.id}
-                  onClick={() => onOpenRule(related.id)}
-                  className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300"
-                >
-                  {related.title}
-                </button>
-              ))}
-            </div>
+            <div className="flex flex-wrap gap-2">{relatedRules.map((related) => <button key={related.id} onClick={() => onOpenRule(related.id)} className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300">{related.title}</button>)}</div>
           </div>
         )}
       </div>
@@ -1060,17 +700,7 @@ function RulePanel({
   );
 }
 
-function PlayerPanel({
-  player,
-  canClose,
-  onClose,
-  onUpdatePlayer,
-}: {
-  player: PlayerSheet;
-  canClose: boolean;
-  onClose: () => void;
-  onUpdatePlayer: (player: PlayerSheet) => void;
-}) {
+function PlayerPanel({ player, canClose, onClose, onUpdatePlayer }: { player: PlayerSheet; canClose: boolean; onClose: () => void; onUpdatePlayer: (player: PlayerSheet) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(player.characterName);
   const [draftPlayerName, setDraftPlayerName] = useState(player.playerName);
@@ -1098,86 +728,33 @@ function PlayerPanel({
   }, [player]);
 
   function saveChanges() {
-    onUpdatePlayer({
-      ...player,
-      characterName: draftName.trim() || player.characterName,
-      playerName: draftPlayerName.trim() || player.playerName,
-      role: draftRole.trim(),
-      tier: draftTier.trim(),
-      concept: draftConcept.trim(),
-      status: parseLabeledValues(draftStatus),
-      attributes: parseLabeledValues(draftAttributes),
-      resources: parseLabeledValues(draftResources),
-      abilities: parseAbilities(draftAbilities),
-      notes: splitTextIntoList(draftNotes),
-    });
-
+    onUpdatePlayer({ ...player, characterName: draftName.trim() || player.characterName, playerName: draftPlayerName.trim() || player.playerName, role: draftRole.trim(), tier: draftTier.trim(), concept: draftConcept.trim(), status: parseLabeledValues(draftStatus), attributes: parseLabeledValues(draftAttributes), resources: parseLabeledValues(draftResources), abilities: parseAbilities(draftAbilities), notes: splitTextIntoList(draftNotes) });
     setIsEditing(false);
   }
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/20">
-      <PanelHeader
-        title={player.characterName}
-        subtitle={player.role}
-        isEditing={isEditing}
-        canClose={canClose}
-        onEdit={() => setIsEditing(true)}
-        onSave={saveChanges}
-        onCancel={() => setIsEditing(false)}
-        onClose={onClose}
-      />
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {isEditing ? (
-          <div className="space-y-4">
-            <EditableInput label="Nome do personagem" value={draftName} onChange={setDraftName} />
-            <EditableInput label="Nome do jogador" value={draftPlayerName} onChange={setDraftPlayerName} />
-            <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
-            <EditableInput label="Tier" value={draftTier} onChange={setDraftTier} />
-            <EditableTextarea label="Conceito" value={draftConcept} onChange={setDraftConcept} rows={5} />
-            <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStatus} onChange={setDraftStatus} rows={8} />
-            <EditableTextarea label="Atributos, um por linha no formato Nome: Valor" value={draftAttributes} onChange={setDraftAttributes} rows={8} />
-            <EditableTextarea label="Recursos, um por linha no formato Nome: Valor" value={draftResources} onChange={setDraftResources} rows={7} />
-            <EditableTextarea
-              label="Habilidades, uma por linha no formato Nome | Tipo | Escala | Custo | Teste | Efeito | Limite"
-              value={draftAbilities}
-              onChange={setDraftAbilities}
-              rows={12}
-            />
-            <EditableTextarea label="Notas do mestre, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={7} />
-          </div>
-        ) : (
-          <SheetReadView
-            typeLabel="Ficha de player"
-            ownerLabel="Player"
-            ownerValue={player.playerName}
-            tier={player.tier}
-            concept={player.concept}
-            status={player.status}
-            attributes={player.attributes}
-            resourcesTitle="Recursos do mestre"
-            resources={player.resources}
-            abilities={player.abilities}
-            notes={player.notes}
-          />
-        )}
-      </div>
-    </article>
+    <SheetPanelFrame title={player.characterName} subtitle={player.role} isEditing={isEditing} canClose={canClose} onEdit={() => setIsEditing(true)} onSave={saveChanges} onCancel={() => setIsEditing(false)} onClose={onClose}>
+      {isEditing ? (
+        <div className="space-y-4">
+          <EditableInput label="Nome do personagem" value={draftName} onChange={setDraftName} />
+          <EditableInput label="Nome do jogador" value={draftPlayerName} onChange={setDraftPlayerName} />
+          <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
+          <EditableInput label="Tier" value={draftTier} onChange={setDraftTier} />
+          <EditableTextarea label="Conceito" value={draftConcept} onChange={setDraftConcept} rows={5} />
+          <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStatus} onChange={setDraftStatus} rows={8} />
+          <EditableTextarea label="Atributos, um por linha no formato Nome: Valor" value={draftAttributes} onChange={setDraftAttributes} rows={8} />
+          <EditableTextarea label="Recursos, um por linha no formato Nome: Valor" value={draftResources} onChange={setDraftResources} rows={7} />
+          <EditableTextarea label="Habilidades, uma por linha no formato Nome | Tipo | Escala | Custo | Teste | Efeito | Limite" value={draftAbilities} onChange={setDraftAbilities} rows={12} />
+          <EditableTextarea label="Notas do mestre, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={7} />
+        </div>
+      ) : (
+        <SheetReadView typeLabel="Ficha de player" ownerLabel="Player" ownerValue={player.playerName} tier={player.tier} concept={player.concept} status={player.status} attributes={player.attributes} resourcesTitle="Recursos do mestre" resources={player.resources} abilities={player.abilities} notes={player.notes} />
+      )}
+    </SheetPanelFrame>
   );
 }
 
-function NpcPanel({
-  npc,
-  canClose,
-  onClose,
-  onUpdateNpc,
-}: {
-  npc: NpcSheet;
-  canClose: boolean;
-  onClose: () => void;
-  onUpdateNpc: (npc: NpcSheet) => void;
-}) {
+function NpcPanel({ npc, canClose, onClose, onUpdateNpc }: { npc: NpcSheet; canClose: boolean; onClose: () => void; onUpdateNpc: (npc: NpcSheet) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(npc.name);
   const [draftRole, setDraftRole] = useState(npc.role);
@@ -1195,57 +772,24 @@ function NpcPanel({
   }, [npc]);
 
   function saveChanges() {
-    onUpdateNpc({
-      ...npc,
-      name: draftName.trim() || npc.name,
-      role: draftRole.trim(),
-      description: draftDescription.trim(),
-      stats: parseLabeledValues(draftStats),
-      notes: splitTextIntoList(draftNotes),
-    });
-
+    onUpdateNpc({ ...npc, name: draftName.trim() || npc.name, role: draftRole.trim(), description: draftDescription.trim(), stats: parseLabeledValues(draftStats), notes: splitTextIntoList(draftNotes) });
     setIsEditing(false);
   }
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/20">
-      <PanelHeader
-        title={npc.name}
-        subtitle={npc.role}
-        isEditing={isEditing}
-        canClose={canClose}
-        onEdit={() => setIsEditing(true)}
-        onSave={saveChanges}
-        onCancel={() => setIsEditing(false)}
-        onClose={onClose}
-      />
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {isEditing ? (
-          <div className="space-y-4">
-            <EditableInput label="Nome" value={draftName} onChange={setDraftName} />
-            <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
-            <EditableTextarea label="Descrição" value={draftDescription} onChange={setDraftDescription} rows={5} />
-            <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStats} onChange={setDraftStats} rows={12} />
-            <EditableTextarea label="Notas e habilidades, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={10} />
-          </div>
-        ) : (
-          <SheetReadView
-            typeLabel="Ficha de NPC"
-            ownerLabel="Categoria"
-            ownerValue={getSheetCategoryLabel(npc.category)}
-            tier={npc.stats.find((item) => item.label === "Tier")?.value ?? "—"}
-            concept={npc.description}
-            status={npc.stats}
-            attributes={npc.stats.filter((item) => ["For", "Con", "Des", "Int", "Sab", "Car"].includes(item.label))}
-            resourcesTitle="Notas e habilidades"
-            resources={[]}
-            abilities={[]}
-            notes={npc.notes}
-          />
-        )}
-      </div>
-    </article>
+    <SheetPanelFrame title={npc.name} subtitle={npc.role} isEditing={isEditing} canClose={canClose} onEdit={() => setIsEditing(true)} onSave={saveChanges} onCancel={() => setIsEditing(false)} onClose={onClose}>
+      {isEditing ? (
+        <div className="space-y-4">
+          <EditableInput label="Nome" value={draftName} onChange={setDraftName} />
+          <EditableInput label="Função" value={draftRole} onChange={setDraftRole} />
+          <EditableTextarea label="Descrição" value={draftDescription} onChange={setDraftDescription} rows={5} />
+          <EditableTextarea label="Status, um por linha no formato Nome: Valor" value={draftStats} onChange={setDraftStats} rows={12} />
+          <EditableTextarea label="Notas e habilidades, uma por linha" value={draftNotes} onChange={setDraftNotes} rows={10} />
+        </div>
+      ) : (
+        <SheetReadView typeLabel="Ficha de NPC" ownerLabel="Categoria" ownerValue={getSheetCategoryLabel(npc.category)} tier={npc.stats.find((item) => item.label === "Tier")?.value ?? "—"} concept={npc.description} status={npc.stats} attributes={npc.stats.filter((item) => ["For", "Con", "Des", "Int", "Sab", "Car"].includes(item.label))} resourcesTitle="Notas e habilidades" resources={[]} abilities={[]} notes={npc.notes} />
+      )}
+    </SheetPanelFrame>
   );
 }
 
@@ -1253,70 +797,24 @@ function getSheetCategoryLabel(category: SheetCategory) {
   return sheetCategories.find((item) => item.id === category)?.label ?? category;
 }
 
-function PanelHeader({
-  title,
-  subtitle,
-  isEditing,
-  canClose,
-  onEdit,
-  onSave,
-  onCancel,
-  onClose,
-}: {
-  title: string;
-  subtitle: string;
-  isEditing: boolean;
-  canClose: boolean;
-  onEdit: () => void;
-  onSave: () => void;
-  onCancel: () => void;
-  onClose: () => void;
-}) {
+function SheetPanelFrame({ title, subtitle, isEditing, canClose, onEdit, onSave, onCancel, onClose, children }: { title: string; subtitle: string; isEditing: boolean; canClose: boolean; onEdit: () => void; onSave: () => void; onCancel: () => void; onClose: () => void; children: ReactNode }) {
   return (
-    <header className="border-b border-zinc-800 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-amber-300">{title}</h2>
-          <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/20">
+      <header className="border-b border-zinc-800 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold text-amber-300">{title}</h2>
+            <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+          </div>
+          <PanelActions isEditing={isEditing} canClose={canClose} onEdit={onEdit} onSave={onSave} onCancel={onCancel} onClose={onClose} />
         </div>
-        <PanelActions
-          isEditing={isEditing}
-          canClose={canClose}
-          onEdit={onEdit}
-          onSave={onSave}
-          onCancel={onCancel}
-          onClose={onClose}
-        />
-      </div>
-    </header>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+    </article>
   );
 }
 
-function SheetReadView({
-  typeLabel,
-  ownerLabel,
-  ownerValue,
-  tier,
-  concept,
-  status,
-  attributes,
-  resourcesTitle,
-  resources,
-  abilities,
-  notes,
-}: {
-  typeLabel: string;
-  ownerLabel: string;
-  ownerValue: string;
-  tier: string;
-  concept: string;
-  status: LabeledValue[];
-  attributes: LabeledValue[];
-  resourcesTitle: string;
-  resources: LabeledValue[];
-  abilities: PlayerAbility[];
-  notes: string[];
-}) {
+function SheetReadView({ typeLabel, ownerLabel, ownerValue, tier, concept, status, attributes, resourcesTitle, resources, abilities, notes }: { typeLabel: string; ownerLabel: string; ownerValue: string; tier: string; concept: string; status: LabeledValue[]; attributes: LabeledValue[]; resourcesTitle: string; resources: LabeledValue[]; abilities: PlayerAbility[]; notes: string[] }) {
   return (
     <div className="space-y-6">
       <div>
@@ -1359,11 +857,7 @@ function SheetReadView({
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
         <p className="mb-3 text-sm font-semibold text-amber-300">{resourcesTitle}</p>
-        <ul className="space-y-2 text-sm text-zinc-300">
-          {notes.map((note) => (
-            <li key={note}>• {note}</li>
-          ))}
-        </ul>
+        <ul className="space-y-2 text-sm text-zinc-300">{notes.map((note) => <li key={note}>• {note}</li>)}</ul>
       </div>
     </div>
   );
@@ -1385,102 +879,37 @@ function LabeledGrid({ title, items }: { title: string; items: LabeledValue[] })
   );
 }
 
-function EditableInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function EditableInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm normal-case text-zinc-200 outline-none focus:border-amber-500"
-      />
+      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm normal-case text-zinc-200 outline-none focus:border-amber-500" />
     </label>
   );
 }
 
-function EditableTextarea({
-  label,
-  value,
-  onChange,
-  rows,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  rows: number;
-}) {
+function EditableTextarea({ label, value, onChange, rows }: { label: string; value: string; onChange: (value: string) => void; rows: number }) {
   return (
     <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={rows}
-        className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500"
-      />
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm normal-case leading-7 text-zinc-200 outline-none focus:border-amber-500" />
     </label>
   );
 }
 
-function PanelActions({
-  isEditing,
-  canClose,
-  onEdit,
-  onSave,
-  onCancel,
-  onClose,
-}: {
-  isEditing: boolean;
-  canClose: boolean;
-  onEdit: () => void;
-  onSave: () => void;
-  onCancel: () => void;
-  onClose: () => void;
-}) {
+function PanelActions({ isEditing, canClose, onEdit, onSave, onCancel, onClose }: { isEditing: boolean; canClose: boolean; onEdit: () => void; onSave: () => void; onCancel: () => void; onClose: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-2">
       {isEditing ? (
         <>
-          <button
-            onClick={onSave}
-            className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400"
-          >
-            <Save className="h-3.5 w-3.5" />
-            Salvar
-          </button>
-          <button
-            onClick={onCancel}
-            className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-zinc-500"
-          >
-            Cancelar
-          </button>
+          <button onClick={onSave} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400"><Save className="h-3.5 w-3.5" />Salvar</button>
+          <button onClick={onCancel} className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-zinc-500">Cancelar</button>
         </>
       ) : (
-        <button
-          onClick={onEdit}
-          className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300"
-        >
-          <Edit3 className="h-3.5 w-3.5" />
-          Editar
-        </button>
+        <button onClick={onEdit} className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-500/60 hover:text-amber-300"><Edit3 className="h-3.5 w-3.5" />Editar</button>
       )}
 
-      <button
-        onClick={onClose}
-        disabled={!canClose}
-        title={canClose ? "Fechar painel" : "Mantenha pelo menos um painel aberto"}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
-      >
-        <X className="h-4 w-4" />
-      </button>
+      <button onClick={onClose} disabled={!canClose} title={canClose ? "Fechar painel" : "Mantenha pelo menos um painel aberto"} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400"><X className="h-4 w-4" /></button>
     </div>
   );
 }
