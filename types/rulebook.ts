@@ -31,6 +31,31 @@ export type RpgTable = {
   description: string;
 };
 
+export type TableNote = {
+  id: string;
+  title: string;
+  content: string;
+  isPrivate: boolean;
+};
+
+export type SessionPlan = {
+  id: string;
+  title: string;
+  summary: string;
+  scenes: string[];
+  linkedRefs: string[];
+  notes: string[];
+};
+
+export type ActivityEntry = {
+  id: string;
+  scope: "system" | "table";
+  action: string;
+  targetType: string;
+  targetName: string;
+  createdAt: string;
+};
+
 export type RuleArticle = {
   id: string;
   category: RuleCategory;
@@ -83,6 +108,8 @@ export type RulebookContent = {
   rules: RuleArticle[];
   npcs: NpcSheet[];
   players: PlayerSheet[];
+  notes: TableNote[];
+  sessions: SessionPlan[];
 };
 
 export type RulebookData = RulebookContent & {
@@ -90,6 +117,7 @@ export type RulebookData = RulebookContent & {
   tables: RpgTable[];
   activeTableId: string;
   activeSystemId: string;
+  history: ActivityEntry[];
 };
 
 export type OpenPanel =
@@ -108,6 +136,18 @@ export type OpenPanel =
   | {
       id: string;
       type: "player";
+      refId: string;
+      title: string;
+    }
+  | {
+      id: string;
+      type: "note";
+      refId: string;
+      title: string;
+    }
+  | {
+      id: string;
+      type: "session";
       refId: string;
       title: string;
     };
