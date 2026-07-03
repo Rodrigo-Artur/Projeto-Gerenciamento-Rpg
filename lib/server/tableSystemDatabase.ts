@@ -9,6 +9,7 @@ import {
   initialRuleArticles,
 } from "@/data/systemRules";
 import type {
+  ActivityEntry,
   NpcSheet,
   PlayerSheet,
   RpgSystem,
@@ -16,7 +17,9 @@ import type {
   RuleArticle,
   RulebookContent,
   RulebookData,
+  SessionPlan,
   SheetCategory,
+  TableNote,
 } from "@/types/rulebook";
 
 type SystemRow = {
@@ -30,6 +33,20 @@ type TableRow = {
   system_id: string | null;
   name: string;
   description: string;
+};
+
+type TableExtrasRow = TableRow & {
+  notes_json: string | null;
+  sessions_json: string | null;
+};
+
+type HistoryRow = {
+  id: string;
+  scope: "system" | "table";
+  action: string;
+  target_type: string;
+  target_name: string;
+  created_at: string;
 };
 
 type RuleRow = {
@@ -76,7 +93,8 @@ declare global {
   var mesaDoMestreV2Database: Database.Database | undefined;
 }
 
-function parseJson<T>(value: string, fallback: T): T {
+function parseJson<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
   try {
     return JSON.parse(value) as T;
   } catch {
@@ -92,6 +110,10 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
+}
+
+function makeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function getDatabase() {
@@ -126,6 +148,8 @@ function createSchema(db: Database.Database) {
       system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}',
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      notes_json TEXT NOT NULL DEFAULT '[]',
+      sessions_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -172,6 +196,17 @@ function createSchema(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS activity_history (
+      id TEXT PRIMARY KEY,
+      table_id TEXT,
+      system_id TEXT,
+      scope TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -183,6 +218,14 @@ function hasColumn(db: Database.Database, tableName: string, columnName: string)
 function runMigrations(db: Database.Database) {
   if (!hasColumn(db, "rpg_tables", "system_id")) {
     db.exec(`ALTER TABLE rpg_tables ADD COLUMN system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}'`);
+  }
+
+  if (!hasColumn(db, "rpg_tables", "notes_json")) {
+    db.exec("ALTER TABLE rpg_tables ADD COLUMN notes_json TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  if (!hasColumn(db, "rpg_tables", "sessions_json")) {
+    db.exec("ALTER TABLE rpg_tables ADD COLUMN sessions_json TEXT NOT NULL DEFAULT '[]'");
   }
 
   if (!hasColumn(db, "rule_articles", "system_id")) {
@@ -249,10 +292,7 @@ function prefixId(ownerId: string, id: string) {
 }
 
 function cloneRulesForSystem(systemId: string): RuleArticle[] {
-  return initialRuleArticles.map((rule) => ({
-    ...rule,
-    id: prefixId(systemId, rule.id),
-  }));
+  return initialRuleArticles.map((rule) => ({ ...rule, id: prefixId(systemId, rule.id) }));
 }
 
 function cloneSheetsForTable(tableId: string) {
@@ -260,6 +300,38 @@ function cloneSheetsForTable(tableId: string) {
     npcs: tableId === DEFAULT_TABLE_ID ? allInitialNpcSheets : [],
     players: tableId === DEFAULT_TABLE_ID ? initialPlayerSheets : [],
   };
+}
+
+function addHistory(
+  db: Database.Database,
+  {
+    tableId,
+    systemId,
+    scope,
+    action,
+    targetType,
+    targetName,
+  }: {
+    tableId?: string;
+    systemId?: string;
+    scope: "system" | "table";
+    action: string;
+    targetType: string;
+    targetName: string;
+  }
+) {
+  db.prepare(`
+    INSERT INTO activity_history (id, table_id, system_id, scope, action, target_type, target_name)
+    VALUES (@id, @tableId, @systemId, @scope, @action, @targetType, @targetName)
+  `).run({
+    id: makeId("history"),
+    tableId: tableId ?? null,
+    systemId: systemId ?? null,
+    scope,
+    action,
+    targetType,
+    targetName,
+  });
 }
 
 function insertRules(db: Database.Database, systemId: string, rules: RuleArticle[]) {
@@ -368,11 +440,7 @@ function getSystems(db: Database.Database): RpgSystem[] {
     .prepare("SELECT id, name, description FROM rpg_systems ORDER BY created_at ASC, rowid ASC")
     .all() as SystemRow[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    description: row.description,
-  }));
+  return rows.map((row) => ({ id: row.id, name: row.name, description: row.description }));
 }
 
 function getTables(db: Database.Database): RpgTable[] {
@@ -385,6 +453,38 @@ function getTables(db: Database.Database): RpgTable[] {
     systemId: row.system_id ?? DEFAULT_SYSTEM_ID,
     name: row.name,
     description: row.description,
+  }));
+}
+
+function getTableExtras(db: Database.Database, tableId: string) {
+  const row = db
+    .prepare("SELECT id, system_id, name, description, notes_json, sessions_json FROM rpg_tables WHERE id = ?")
+    .get(tableId) as TableExtrasRow | undefined;
+
+  return {
+    notes: parseJson<TableNote[]>(row?.notes_json, []),
+    sessions: parseJson<SessionPlan[]>(row?.sessions_json, []),
+  };
+}
+
+function getHistory(db: Database.Database, tableId: string, systemId: string): ActivityEntry[] {
+  const rows = db
+    .prepare(`
+      SELECT id, scope, action, target_type, target_name, created_at
+      FROM activity_history
+      WHERE table_id = @tableId OR system_id = @systemId
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 40
+    `)
+    .all({ tableId, systemId }) as HistoryRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    scope: row.scope,
+    action: row.action,
+    targetType: row.target_type,
+    targetName: row.target_name,
+    createdAt: row.created_at,
   }));
 }
 
@@ -418,17 +518,10 @@ export function getLocalDatabasePath() {
   return DB_PATH;
 }
 
-export function createRpgSystem({
-  name,
-  description,
-}: {
-  name: string;
-  description: string;
-}): RpgSystem {
+export function createRpgSystem({ name, description }: { name: string; description: string }): RpgSystem {
   const db = getDatabase();
   const baseId = slugify(name) || "sistema";
   const systemId = `${baseId}-${Date.now()}`;
-
   const system: RpgSystem = { id: systemId, name, description };
 
   db.prepare(
@@ -437,6 +530,13 @@ export function createRpgSystem({
   ).run(system);
 
   insertRules(db, systemId, cloneRulesForSystem(systemId));
+  addHistory(db, {
+    systemId,
+    scope: "system",
+    action: "criou sistema",
+    targetType: "sistema",
+    targetName: name,
+  });
 
   return system;
 }
@@ -461,6 +561,15 @@ export function createRpgTable({
      VALUES (@id, @systemId, @name, @description)`
   ).run(table);
 
+  addHistory(db, {
+    tableId,
+    systemId: resolvedSystemId,
+    scope: "table",
+    action: "criou mesa",
+    targetType: "mesa",
+    targetName: name,
+  });
+
   return table;
 }
 
@@ -470,6 +579,8 @@ export function getRulebookData(tableId?: string): RulebookData {
   const systems = getSystems(db);
   const tables = getTables(db);
   const activeSystemId = activeTable.systemId;
+  const extras = getTableExtras(db, activeTable.id);
+
   const ruleRows = db
     .prepare("SELECT id, category, title, summary, content, tags_json FROM rule_articles WHERE system_id = ? ORDER BY rowid ASC")
     .all(activeSystemId) as RuleRow[];
@@ -531,6 +642,9 @@ export function getRulebookData(tableId?: string): RulebookData {
       abilities: parseJson(row.abilities_json, []),
       notes: parseJson(row.notes_json, []),
     })),
+    notes: extras.notes,
+    sessions: extras.sessions,
+    history: getHistory(db, activeTable.id, activeSystemId),
   };
 }
 
@@ -542,6 +656,7 @@ export function saveRulebookData(
   const db = getDatabase();
   const activeTable = resolveTable(db, tableId);
   const activeSystemId = resolveSystemId(db, systemId || activeTable.systemId);
+
   const saveRule = db.prepare(`
     INSERT INTO rule_articles (id, system_id, table_id, category, title, summary, content, tags_json, updated_at)
     VALUES (@id, @systemId, @tableId, @category, @title, @summary, @content, @tagsJson, CURRENT_TIMESTAMP)
@@ -613,6 +728,21 @@ export function saveRulebookData(
   `);
 
   const transaction = db.transaction((rulebook: RulebookContent) => {
+    db.prepare("DELETE FROM rule_articles WHERE system_id = ?").run(activeSystemId);
+    db.prepare("DELETE FROM npc_sheets WHERE table_id = ?").run(activeTable.id);
+    db.prepare("DELETE FROM player_sheets WHERE table_id = ?").run(activeTable.id);
+    db.prepare(
+      `UPDATE rpg_tables
+       SET notes_json = @notesJson,
+           sessions_json = @sessionsJson,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = @tableId`
+    ).run({
+      tableId: activeTable.id,
+      notesJson: JSON.stringify(rulebook.notes ?? []),
+      sessionsJson: JSON.stringify(rulebook.sessions ?? []),
+    });
+
     for (const rule of rulebook.rules) {
       saveRule.run({
         id: rule.id,
@@ -655,6 +785,15 @@ export function saveRulebookData(
         notesJson: JSON.stringify(player.notes),
       });
     }
+
+    addHistory(db, {
+      tableId: activeTable.id,
+      systemId: activeSystemId,
+      scope: "table",
+      action: "salvou alterações",
+      targetType: "conteúdo",
+      targetName: activeTable.name,
+    });
   });
 
   transaction(data);
@@ -667,9 +806,18 @@ export function resetDatabaseToInitialSeed(tableId = DEFAULT_TABLE_ID) {
   const transaction = db.transaction(() => {
     db.prepare("DELETE FROM npc_sheets WHERE table_id = ?").run(activeTable.id);
     db.prepare("DELETE FROM player_sheets WHERE table_id = ?").run(activeTable.id);
+    db.prepare("UPDATE rpg_tables SET notes_json = '[]', sessions_json = '[]' WHERE id = ?").run(activeTable.id);
   });
 
   transaction();
   insertNpcs(db, activeTable.id, sheets.npcs);
   insertPlayers(db, activeTable.id, sheets.players);
+  addHistory(db, {
+    tableId: activeTable.id,
+    systemId: activeTable.systemId,
+    scope: "table",
+    action: "restaurou fichas",
+    targetType: "mesa",
+    targetName: activeTable.name,
+  });
 }
