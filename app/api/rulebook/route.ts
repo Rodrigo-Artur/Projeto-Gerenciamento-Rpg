@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  createRpgSystem,
   createRpgTable,
   getRulebookData,
   resetDatabaseToInitialSeed,
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const data = (await request.json()) as RulebookData;
   const tableId = data.activeTableId || getTableIdFromRequest(request);
+  const systemId = data.activeSystemId;
 
   saveRulebookData(
     {
@@ -33,7 +35,8 @@ export async function PUT(request: Request) {
       npcs: data.npcs ?? [],
       players: data.players ?? [],
     },
-    tableId
+    tableId,
+    systemId
   );
 
   return NextResponse.json({
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     action?: string;
     tableId?: string;
+    systemId?: string;
     name?: string;
     description?: string;
   };
@@ -54,10 +58,24 @@ export async function POST(request: Request) {
     resetDatabaseToInitialSeed(body.tableId);
   }
 
+  if (body.action === "create-system") {
+    const system = createRpgSystem({
+      name: body.name?.trim() || "Novo sistema",
+      description: body.description?.trim() || "Sistema criado pelo Mesa do Mestre.",
+    });
+
+    return NextResponse.json({
+      ...getRulebookData(body.tableId),
+      createdSystemId: system.id,
+      databaseMode: "sqlite-local",
+    });
+  }
+
   if (body.action === "create-table") {
     const table = createRpgTable({
       name: body.name?.trim() || "Nova mesa",
       description: body.description?.trim() || "Mesa criada pelo Mesa do Mestre.",
+      systemId: body.systemId,
     });
 
     return NextResponse.json({
