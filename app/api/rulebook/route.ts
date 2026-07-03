@@ -34,6 +34,8 @@ export async function PUT(request: Request) {
       rules: data.rules ?? [],
       npcs: data.npcs ?? [],
       players: data.players ?? [],
+      notes: data.notes ?? [],
+      sessions: data.sessions ?? [],
     },
     tableId,
     systemId
