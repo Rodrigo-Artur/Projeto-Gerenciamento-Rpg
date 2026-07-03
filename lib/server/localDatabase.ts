@@ -11,6 +11,7 @@ import {
 import type {
   NpcSheet,
   PlayerSheet,
+  RpgSystem,
   RpgTable,
   RuleArticle,
   RulebookContent,
@@ -18,8 +19,15 @@ import type {
   SheetCategory,
 } from "@/types/rulebook";
 
+type SystemRow = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 type TableRow = {
   id: string;
+  system_id: string | null;
   name: string;
   description: string;
 };
@@ -59,6 +67,7 @@ type PlayerRow = {
 
 const DB_DIRECTORY = path.join(process.cwd(), ".local");
 const DB_PATH = path.join(DB_DIRECTORY, "mesa-do-mestre.sqlite");
+const DEFAULT_SYSTEM_ID = "kaiju-rpg";
 const DEFAULT_TABLE_ID = "mesa-principal";
 const allInitialNpcSheets = [...initialNpcSheets, ...extraNpcSheets];
 
@@ -104,8 +113,17 @@ function getDatabase() {
 
 function createSchema(db: Database.Database) {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_systems (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS rpg_tables (
       id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}',
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,6 +132,7 @@ function createSchema(db: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS rule_articles (
       id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}',
       table_id TEXT NOT NULL DEFAULT '${DEFAULT_TABLE_ID}',
       category TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -163,13 +182,31 @@ function hasColumn(db: Database.Database, tableName: string, columnName: string)
 
 function runMigrations(db: Database.Database) {
   db.prepare(
-    `INSERT OR IGNORE INTO rpg_tables (id, name, description)
+    `INSERT OR IGNORE INTO rpg_systems (id, name, description)
      VALUES (?, ?, ?)`
   ).run(
+    DEFAULT_SYSTEM_ID,
+    "Kaiju RPG",
+    "Sistema base do projeto, com regras, fichas e referências do Kaiju RPG."
+  );
+
+  db.prepare(
+    `INSERT OR IGNORE INTO rpg_tables (id, system_id, name, description)
+     VALUES (?, ?, ?, ?)`
+  ).run(
     DEFAULT_TABLE_ID,
+    DEFAULT_SYSTEM_ID,
     "Mesa Principal",
     "Mesa criada automaticamente com todos os dados que já existiam antes do suporte a múltiplas mesas."
   );
+
+  if (!hasColumn(db, "rpg_tables", "system_id")) {
+    db.exec(`ALTER TABLE rpg_tables ADD COLUMN system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}'`);
+  }
+
+  if (!hasColumn(db, "rule_articles", "system_id")) {
+    db.exec(`ALTER TABLE rule_articles ADD COLUMN system_id TEXT NOT NULL DEFAULT '${DEFAULT_SYSTEM_ID}'`);
+  }
 
   if (!hasColumn(db, "rule_articles", "table_id")) {
     db.exec(`ALTER TABLE rule_articles ADD COLUMN table_id TEXT NOT NULL DEFAULT '${DEFAULT_TABLE_ID}'`);
@@ -190,14 +227,14 @@ function runMigrations(db: Database.Database) {
 
 function seedInitialData(db: Database.Database) {
   const existingRules = db
-    .prepare("SELECT COUNT(*) AS total FROM rule_articles WHERE table_id = ?")
-    .get(DEFAULT_TABLE_ID) as { total: number };
+    .prepare("SELECT COUNT(*) AS total FROM rule_articles WHERE system_id = ?")
+    .get(DEFAULT_SYSTEM_ID) as { total: number };
   const existingPlayers = db
     .prepare("SELECT COUNT(*) AS total FROM player_sheets WHERE table_id = ?")
     .get(DEFAULT_TABLE_ID) as { total: number };
 
   if (existingRules.total === 0) {
-    insertRules(db, DEFAULT_TABLE_ID, initialRuleArticles);
+    insertRules(db, DEFAULT_SYSTEM_ID, initialRuleArticles);
   }
 
   if (existingPlayers.total === 0) {
@@ -207,38 +244,36 @@ function seedInitialData(db: Database.Database) {
   insertNpcs(db, DEFAULT_TABLE_ID, allInitialNpcSheets);
 }
 
-function prefixId(tableId: string, id: string) {
-  return tableId === DEFAULT_TABLE_ID ? id : `${tableId}--${id}`;
+function prefixId(ownerId: string, id: string) {
+  return ownerId === DEFAULT_SYSTEM_ID || ownerId === DEFAULT_TABLE_ID ? id : `${ownerId}--${id}`;
 }
 
-function cloneContentForTable(tableId: string): RulebookContent {
+function cloneRulesForSystem(systemId: string): RuleArticle[] {
+  return initialRuleArticles.map((rule) => ({
+    ...rule,
+    id: prefixId(systemId, rule.id),
+  }));
+}
+
+function cloneSheetsForTable(tableId: string): Pick<RulebookContent, "npcs" | "players"> {
   return {
-    rules: initialRuleArticles.map((rule) => ({
-      ...rule,
-      id: prefixId(tableId, rule.id),
-    })),
-    npcs: allInitialNpcSheets.map((npc) => ({
-      ...npc,
-      id: prefixId(tableId, npc.id),
-    })),
-    players: initialPlayerSheets.map((player) => ({
-      ...player,
-      id: prefixId(tableId, player.id),
-    })),
+    npcs: tableId === DEFAULT_TABLE_ID ? allInitialNpcSheets : [],
+    players: tableId === DEFAULT_TABLE_ID ? initialPlayerSheets : [],
   };
 }
 
-function insertRules(db: Database.Database, tableId: string, rules: RuleArticle[]) {
+function insertRules(db: Database.Database, systemId: string, rules: RuleArticle[]) {
   const insertRule = db.prepare(`
-    INSERT OR IGNORE INTO rule_articles (id, table_id, category, title, summary, content, tags_json)
-    VALUES (@id, @tableId, @category, @title, @summary, @content, @tagsJson)
+    INSERT OR IGNORE INTO rule_articles (id, system_id, table_id, category, title, summary, content, tags_json)
+    VALUES (@id, @systemId, @tableId, @category, @title, @summary, @content, @tagsJson)
   `);
 
   const transaction = db.transaction((items: RuleArticle[]) => {
     for (const rule of items) {
       insertRule.run({
         id: rule.id,
-        tableId,
+        systemId,
+        tableId: DEFAULT_TABLE_ID,
         category: rule.category,
         title: rule.title,
         summary: rule.summary,
@@ -260,7 +295,7 @@ function insertNpcs(db: Database.Database, tableId: string, npcs: NpcSheet[]) {
   const transaction = db.transaction((items: NpcSheet[]) => {
     for (const npc of items) {
       insertNpc.run({
-        id: npc.id,
+        id: prefixId(tableId, npc.id),
         tableId,
         category: npc.category,
         name: npc.name,
@@ -309,7 +344,7 @@ function insertPlayers(db: Database.Database, tableId: string, players: PlayerSh
   const transaction = db.transaction((items: PlayerSheet[]) => {
     for (const player of items) {
       insertPlayer.run({
-        id: player.id,
+        id: prefixId(tableId, player.id),
         tableId,
         characterName: player.characterName,
         playerName: player.playerName,
@@ -328,10 +363,10 @@ function insertPlayers(db: Database.Database, tableId: string, players: PlayerSh
   transaction(players);
 }
 
-function getTables(db: Database.Database): RpgTable[] {
+function getSystems(db: Database.Database): RpgSystem[] {
   const rows = db
-    .prepare("SELECT id, name, description FROM rpg_tables ORDER BY created_at ASC, rowid ASC")
-    .all() as TableRow[];
+    .prepare("SELECT id, name, description FROM rpg_systems ORDER BY created_at ASC, rowid ASC")
+    .all() as SystemRow[];
 
   return rows.map((row) => ({
     id: row.id,
@@ -340,61 +375,118 @@ function getTables(db: Database.Database): RpgTable[] {
   }));
 }
 
-function resolveTableId(db: Database.Database, tableId?: string) {
+function getTables(db: Database.Database): RpgTable[] {
+  const rows = db
+    .prepare("SELECT id, system_id, name, description FROM rpg_tables ORDER BY created_at ASC, rowid ASC")
+    .all() as TableRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    systemId: row.system_id ?? DEFAULT_SYSTEM_ID,
+    name: row.name,
+    description: row.description,
+  }));
+}
+
+function resolveTable(db: Database.Database, tableId?: string) {
   const tables = getTables(db);
 
-  if (tableId && tables.some((table) => table.id === tableId)) {
-    return tableId;
+  if (tableId) {
+    const table = tables.find((item) => item.id === tableId);
+    if (table) return table;
   }
 
-  return tables[0]?.id ?? DEFAULT_TABLE_ID;
+  return tables[0] ?? {
+    id: DEFAULT_TABLE_ID,
+    systemId: DEFAULT_SYSTEM_ID,
+    name: "Mesa Principal",
+    description: "Mesa principal.",
+  };
+}
+
+function resolveSystemId(db: Database.Database, systemId?: string) {
+  const systems = getSystems(db);
+
+  if (systemId && systems.some((system) => system.id === systemId)) {
+    return systemId;
+  }
+
+  return systems[0]?.id ?? DEFAULT_SYSTEM_ID;
 }
 
 export function getLocalDatabasePath() {
   return DB_PATH;
 }
 
-export function createRpgTable({
+export function createRpgSystem({
   name,
   description,
 }: {
   name: string;
   description: string;
-}): RpgTable {
+}): RpgSystem {
   const db = getDatabase();
-  const baseId = slugify(name) || "mesa";
-  const tableId = `${baseId}-${Date.now()}`;
+  const baseId = slugify(name) || "sistema";
+  const systemId = `${baseId}-${Date.now()}`;
 
-  const table: RpgTable = {
-    id: tableId,
+  const system: RpgSystem = {
+    id: systemId,
     name,
     description,
   };
 
   db.prepare(
-    `INSERT INTO rpg_tables (id, name, description)
+    `INSERT INTO rpg_systems (id, name, description)
      VALUES (@id, @name, @description)`
-  ).run(table);
+  ).run(system);
 
-  const content = cloneContentForTable(tableId);
-  insertRules(db, tableId, content.rules);
-  insertNpcs(db, tableId, content.npcs);
-  insertPlayers(db, tableId, content.players);
+  insertRules(db, systemId, cloneRulesForSystem(systemId));
+
+  return system;
+}
+
+export function createRpgTable({
+  name,
+  description,
+  systemId,
+}: {
+  name: string;
+  description: string;
+  systemId?: string;
+}): RpgTable {
+  const db = getDatabase();
+  const resolvedSystemId = resolveSystemId(db, systemId);
+  const baseId = slugify(name) || "mesa";
+  const tableId = `${baseId}-${Date.now()}`;
+
+  const table: RpgTable = {
+    id: tableId,
+    systemId: resolvedSystemId,
+    name,
+    description,
+  };
+
+  db.prepare(
+    `INSERT INTO rpg_tables (id, system_id, name, description)
+     VALUES (@id, @systemId, @name, @description)`
+  ).run(table);
 
   return table;
 }
 
 export function getRulebookData(tableId?: string): RulebookData {
   const db = getDatabase();
-  const activeTableId = resolveTableId(db, tableId);
+  const activeTable = resolveTable(db, tableId);
   const tables = getTables(db);
+  const systems = getSystems(db);
+  const activeSystemId = activeTable.systemId;
 
   const ruleRows = db
-    .prepare("SELECT id, category, title, summary, content, tags_json FROM rule_articles WHERE table_id = ? ORDER BY rowid ASC")
-    .all(activeTableId) as RuleRow[];
+    .prepare("SELECT id, category, title, summary, content, tags_json FROM rule_articles WHERE system_id = ? ORDER BY rowid ASC")
+    .all(activeSystemId) as RuleRow[];
   const npcRows = db
     .prepare("SELECT id, category, name, role, description, stats_json, notes_json FROM npc_sheets WHERE table_id = ? ORDER BY category ASC, rowid ASC")
-    .all(activeTableId) as NpcRow[];
+    .all(activeTable.id) as NpcRow[];
   const playerRows = db
     .prepare(`
       SELECT
@@ -413,11 +505,13 @@ export function getRulebookData(tableId?: string): RulebookData {
       WHERE table_id = ?
       ORDER BY rowid ASC
     `)
-    .all(activeTableId) as PlayerRow[];
+    .all(activeTable.id) as PlayerRow[];
 
   return {
+    systems,
     tables,
-    activeTableId,
+    activeTableId: activeTable.id,
+    activeSystemId,
     rules: ruleRows.map((row) => ({
       id: row.id,
       category: row.category,
@@ -451,15 +545,20 @@ export function getRulebookData(tableId?: string): RulebookData {
   };
 }
 
-export function saveRulebookData(data: RulebookContent, tableId = DEFAULT_TABLE_ID) {
+export function saveRulebookData(
+  data: RulebookContent,
+  tableId = DEFAULT_TABLE_ID,
+  systemId = DEFAULT_SYSTEM_ID
+) {
   const db = getDatabase();
-  const activeTableId = resolveTableId(db, tableId);
+  const activeTable = resolveTable(db, tableId);
+  const activeSystemId = resolveSystemId(db, systemId || activeTable.systemId);
 
   const saveRule = db.prepare(`
-    INSERT INTO rule_articles (id, table_id, category, title, summary, content, tags_json, updated_at)
-    VALUES (@id, @tableId, @category, @title, @summary, @content, @tagsJson, CURRENT_TIMESTAMP)
+    INSERT INTO rule_articles (id, system_id, table_id, category, title, summary, content, tags_json, updated_at)
+    VALUES (@id, @systemId, @tableId, @category, @title, @summary, @content, @tagsJson, CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET
-      table_id = excluded.table_id,
+      system_id = excluded.system_id,
       category = excluded.category,
       title = excluded.title,
       summary = excluded.summary,
@@ -531,7 +630,8 @@ export function saveRulebookData(data: RulebookContent, tableId = DEFAULT_TABLE_
     for (const rule of rulebook.rules) {
       saveRule.run({
         id: rule.id,
-        tableId: activeTableId,
+        systemId: activeSystemId,
+        tableId: activeTable.id,
         category: rule.category,
         title: rule.title,
         summary: rule.summary,
@@ -543,7 +643,7 @@ export function saveRulebookData(data: RulebookContent, tableId = DEFAULT_TABLE_
     for (const npc of rulebook.npcs) {
       saveNpc.run({
         id: npc.id,
-        tableId: activeTableId,
+        tableId: activeTable.id,
         category: npc.category,
         name: npc.name,
         role: npc.role,
@@ -556,7 +656,7 @@ export function saveRulebookData(data: RulebookContent, tableId = DEFAULT_TABLE_
     for (const player of rulebook.players) {
       savePlayer.run({
         id: player.id,
-        tableId: activeTableId,
+        tableId: activeTable.id,
         characterName: player.characterName,
         playerName: player.playerName,
         role: player.role,
@@ -576,15 +676,15 @@ export function saveRulebookData(data: RulebookContent, tableId = DEFAULT_TABLE_
 
 export function resetDatabaseToInitialSeed(tableId = DEFAULT_TABLE_ID) {
   const db = getDatabase();
-  const activeTableId = resolveTableId(db, tableId);
-  const content = cloneContentForTable(activeTableId);
+  const activeTable = resolveTable(db, tableId);
+  const sheets = cloneSheetsForTable(activeTable.id);
 
   const transaction = db.transaction(() => {
-    db.prepare("DELETE FROM rule_articles WHERE table_id = ?").run(activeTableId);
-    db.prepare("DELETE FROM npc_sheets WHERE table_id = ?").run(activeTableId);
-    db.prepare("DELETE FROM player_sheets WHERE table_id = ?").run(activeTableId);
+    db.prepare("DELETE FROM npc_sheets WHERE table_id = ?").run(activeTable.id);
+    db.prepare("DELETE FROM player_sheets WHERE table_id = ?").run(activeTable.id);
   });
 
   transaction();
-  saveRulebookData(content, activeTableId);
+  insertNpcs(db, activeTable.id, sheets.npcs);
+  insertPlayers(db, activeTable.id, sheets.players);
 }
