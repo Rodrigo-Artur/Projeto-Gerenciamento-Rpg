@@ -18,8 +18,15 @@ export type SheetCategory =
   | "ameacas-pesadas"
   | "simbiontes";
 
+export type RpgSystem = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 export type RpgTable = {
   id: string;
+  systemId: string;
   name: string;
   description: string;
 };
@@ -79,8 +86,10 @@ export type RulebookContent = {
 };
 
 export type RulebookData = RulebookContent & {
+  systems: RpgSystem[];
   tables: RpgTable[];
   activeTableId: string;
+  activeSystemId: string;
 };
 
 export type OpenPanel =
