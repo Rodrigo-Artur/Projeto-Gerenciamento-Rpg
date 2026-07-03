@@ -18,6 +18,12 @@ export type SheetCategory =
   | "ameacas-pesadas"
   | "simbiontes";
 
+export type RpgTable = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 export type RuleArticle = {
   id: string;
   category: RuleCategory;
@@ -66,10 +72,15 @@ export type PlayerSheet = {
   notes: string[];
 };
 
-export type RulebookData = {
+export type RulebookContent = {
   rules: RuleArticle[];
   npcs: NpcSheet[];
   players: PlayerSheet[];
+};
+
+export type RulebookData = RulebookContent & {
+  tables: RpgTable[];
+  activeTableId: string;
 };
 
 export type OpenPanel =
