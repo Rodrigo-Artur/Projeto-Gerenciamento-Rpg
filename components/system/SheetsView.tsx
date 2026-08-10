@@ -1,8 +1,9 @@
 "use client";
 
-import { Eye, EyeOff, Plus, Star, Trash2, UserRound, Users } from "lucide-react";
+import { Eye, EyeOff, Plus, Save, Star, Trash2, UserRound, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useDebouncedAutosave, type AutosaveState } from "@/hooks/useDebouncedAutosave";
 import type {
   ContentMeta,
   LabeledValue,
@@ -13,6 +14,8 @@ import type {
   SheetTemplate,
   StructuredAbility,
 } from "@/types/rulebook";
+
+const fallbackCategories: SheetCategory[] = ["criminosos", "policia-umck", "ameacas-pesadas", "simbiontes", "bosses", "aliados", "monstros", "custom"];
 
 function rowsToText(rows: LabeledValue[]) {
   return rows.map((item) => `${item.label}: ${item.value}`).join("\n");
@@ -32,6 +35,14 @@ function textToRows(text: string) {
 function defaultCustomFields(template?: SheetTemplate) {
   if (!template) return {};
   return Object.fromEntries(template.fields.map((field) => [field.id, field.defaultValue ?? ""]));
+}
+
+function initialAttributes(data: RulebookData) {
+  return (data.systemConfig?.attributes ?? []).map((label) => ({ label, value: "0" }));
+}
+
+function initialResources(data: RulebookData) {
+  return (data.systemConfig?.resources ?? []).map((label) => ({ label, value: "0" }));
 }
 
 export function SheetsView({
@@ -65,6 +76,8 @@ export function SheetsView({
 
   async function createPlayer(templateId?: string) {
     const template = (data.templates ?? []).find((item) => item.id === templateId);
+    const resources = initialResources(data);
+    const hpResource = resources.find((item) => ["hp", "pv", "vida"].includes(item.label.toLowerCase()));
     const item: PlayerSheet = {
       id: `player-${Date.now()}`,
       characterName: "Novo personagem",
@@ -72,9 +85,9 @@ export function SheetsView({
       role: template?.name ?? "Personagem",
       tier: String(template?.fields.find((field) => field.id === "tier")?.defaultValue ?? "Tier 1"),
       concept: "Descreva o conceito do personagem.",
-      status: [{ label: "HP", value: "0" }],
-      attributes: [],
-      resources: [],
+      status: hpResource ? [{ ...hpResource }] : [{ label: "HP", value: "0" }],
+      attributes: initialAttributes(data),
+      resources,
       abilities: [],
       structuredAbilities: [],
       notes: [],
@@ -93,13 +106,18 @@ export function SheetsView({
 
   async function createNpc(templateId?: string) {
     const template = (data.templates ?? []).find((item) => item.id === templateId);
+    const configured = (data.systemConfig?.sheetCategories ?? fallbackCategories).filter((category) => category !== "players");
+    const defaultCategory = configured[0] ?? "custom";
     const item: NpcSheet = {
       id: `npc-${Date.now()}`,
-      category: template?.defaultCategory ?? (template?.kind === "boss" ? "bosses" : template?.kind === "monster" ? "monstros" : "custom"),
+      category: template?.defaultCategory ?? (template?.kind === "boss" ? "bosses" : template?.kind === "monster" ? "monstros" : defaultCategory),
       name: "Novo NPC",
       role: template?.name ?? "NPC",
       description: "Descrição do NPC.",
-      stats: [{ label: "HP", value: "0" }],
+      stats: [
+        ...initialResources(data),
+        ...initialAttributes(data),
+      ],
       notes: [],
       abilities: [],
       meta: {
@@ -174,22 +192,26 @@ function PlayerEditor({ item, data, action }: { item: PlayerSheet; data: Ruleboo
   const [resourcesText, setResourcesText] = useState(rowsToText(item.resources));
   const [notesText, setNotesText] = useState(item.notes.join("\n"));
   const template = (data.templates ?? []).find((entry) => entry.id === draft.meta?.templateId);
+  const payload = useMemo<PlayerSheet>(() => ({
+    ...draft,
+    status: textToRows(statusText),
+    attributes: textToRows(attributesText),
+    resources: textToRows(resourcesText),
+    notes: notesText.split("\n").map((line) => line.trim()).filter(Boolean),
+  }), [attributesText, draft, notesText, resourcesText, statusText]);
 
   function patchMeta(patch: Partial<ContentMeta>) {
     setDraft({ ...draft, meta: { ...draft.meta, ...patch } });
   }
 
-  async function save() {
-    await action({
-      action: "upsert-player",
-      tableId: data.activeTableId,
-      systemId: data.activeSystemId,
-      item: { ...draft, status: textToRows(statusText), attributes: textToRows(attributesText), resources: textToRows(resourcesText), notes: notesText.split("\n").map((line) => line.trim()).filter(Boolean) },
-    });
+  async function save(next: PlayerSheet) {
+    await action({ action: "upsert-player", tableId: data.activeTableId, systemId: data.activeSystemId, item: next });
   }
 
+  const autosave = useDebouncedAutosave(payload, save, 1100);
+
   return (
-    <EditorShell title={draft.characterName} subtitle={`${draft.playerName} • ${draft.role}`} meta={draft.meta} onFavorite={() => patchMeta({ favorite: !draft.meta?.favorite })} onVisibility={() => patchMeta({ visibility: draft.meta?.visibility === "players" ? "master" : "players" })} onDelete={async () => { if (confirm(`Excluir ${draft.characterName}?`)) await action({ action: "delete-player", tableId: data.activeTableId, id: draft.id }); }} onSave={() => void save()}>
+    <EditorShell title={draft.characterName} subtitle={`${draft.playerName} • ${draft.role}`} meta={draft.meta} autosave={autosave} onFavorite={() => patchMeta({ favorite: !draft.meta?.favorite })} onVisibility={() => patchMeta({ visibility: draft.meta?.visibility === "players" ? "master" : "players" })} onDelete={async () => { if (confirm(`Excluir ${draft.characterName}?`)) await action({ action: "delete-player", tableId: data.activeTableId, id: draft.id }); }} onSave={() => void save(payload)}>
       <div className="grid gap-3 md:grid-cols-2"><Field label="Personagem" value={draft.characterName} onChange={(value) => setDraft({ ...draft, characterName: value })} /><Field label="Jogador" value={draft.playerName} onChange={(value) => setDraft({ ...draft, playerName: value })} /><Field label="Função / Classe" value={draft.role} onChange={(value) => setDraft({ ...draft, role: value })} /><Field label="Tier / Nível" value={draft.tier} onChange={(value) => setDraft({ ...draft, tier: value })} /></div>
       <Area label="Conceito" value={draft.concept} onChange={(value) => setDraft({ ...draft, concept: value })} rows={4} />
       {template && <CustomFields template={template} meta={draft.meta} onChange={(customFields) => patchMeta({ customFields })} />}
@@ -205,24 +227,26 @@ function NpcEditor({ item, data, action }: { item: NpcSheet; data: RulebookData;
   const [statsText, setStatsText] = useState(rowsToText(item.stats));
   const [notesText, setNotesText] = useState(item.notes.join("\n"));
   const template = (data.templates ?? []).find((entry) => entry.id === draft.meta?.templateId);
-  const categories: SheetCategory[] = ["criminosos", "policia-umck", "ameacas-pesadas", "simbiontes", "bosses", "aliados", "monstros", "custom"];
+  const categories = (data.systemConfig?.sheetCategories?.filter((category) => category !== "players") ?? fallbackCategories) as SheetCategory[];
+  const payload = useMemo<NpcSheet>(() => ({
+    ...draft,
+    stats: textToRows(statsText),
+    notes: notesText.split("\n").map((line) => line.trim()).filter(Boolean),
+  }), [draft, notesText, statsText]);
 
   function patchMeta(patch: Partial<ContentMeta>) {
     setDraft({ ...draft, meta: { ...draft.meta, ...patch } });
   }
 
-  async function save() {
-    await action({
-      action: "upsert-npc",
-      tableId: data.activeTableId,
-      systemId: data.activeSystemId,
-      item: { ...draft, stats: textToRows(statsText), notes: notesText.split("\n").map((line) => line.trim()).filter(Boolean) },
-    });
+  async function save(next: NpcSheet) {
+    await action({ action: "upsert-npc", tableId: data.activeTableId, systemId: data.activeSystemId, item: next });
   }
 
+  const autosave = useDebouncedAutosave(payload, save, 1100);
+
   return (
-    <EditorShell title={draft.name} subtitle={`${draft.category} • ${draft.role}`} meta={draft.meta} onFavorite={() => patchMeta({ favorite: !draft.meta?.favorite })} onVisibility={() => patchMeta({ visibility: draft.meta?.visibility === "players" ? "master" : "players" })} onDelete={async () => { if (confirm(`Excluir ${draft.name}?`)) await action({ action: "delete-npc", tableId: data.activeTableId, id: draft.id }); }} onSave={() => void save()}>
-      <div className="grid gap-3 md:grid-cols-2"><Field label="Nome" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} /><Field label="Função" value={draft.role} onChange={(value) => setDraft({ ...draft, role: value })} /><label className="form-label">Categoria<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as SheetCategory })} className="field mt-2">{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label className="form-label">Template<input disabled value={template?.name ?? "Sem template"} className="field mt-2 opacity-70" /></label></div>
+    <EditorShell title={draft.name} subtitle={`${draft.category} • ${draft.role}`} meta={draft.meta} autosave={autosave} onFavorite={() => patchMeta({ favorite: !draft.meta?.favorite })} onVisibility={() => patchMeta({ visibility: draft.meta?.visibility === "players" ? "master" : "players" })} onDelete={async () => { if (confirm(`Excluir ${draft.name}?`)) await action({ action: "delete-npc", tableId: data.activeTableId, id: draft.id }); }} onSave={() => void save(payload)}>
+      <div className="grid gap-3 md:grid-cols-2"><Field label="Nome" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} /><Field label="Função" value={draft.role} onChange={(value) => setDraft({ ...draft, role: value })} /><label className="form-label">Categoria<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as SheetCategory })} className="field mt-2">{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label><label className="form-label">Template<input disabled value={template?.name ?? "Sem template"} className="field mt-2 opacity-70" /></label></div>
       <Area label="Descrição" value={draft.description} onChange={(value) => setDraft({ ...draft, description: value })} rows={5} />
       {template && <CustomFields template={template} meta={draft.meta} onChange={(customFields) => patchMeta({ customFields })} />}
       <Area label="Status — Nome: Valor" value={statsText} onChange={setStatsText} rows={12} />
@@ -232,8 +256,9 @@ function NpcEditor({ item, data, action }: { item: NpcSheet; data: RulebookData;
   );
 }
 
-function EditorShell({ title, subtitle, meta, onFavorite, onVisibility, onDelete, onSave, children }: { title: string; subtitle: string; meta?: ContentMeta; onFavorite: () => void; onVisibility: () => void; onDelete: () => void; onSave: () => void; children: React.ReactNode }) {
-  return <div className="mx-auto max-w-5xl space-y-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Ficha da mesa</p><h2 className="mt-1 text-2xl font-bold text-zinc-100">{title}</h2><p className="text-sm text-zinc-500">{subtitle}</p></div><div className="flex gap-2"><button onClick={onFavorite} className="icon-button"><Star className={`h-4 w-4 ${meta?.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={onVisibility} className="icon-button">{meta?.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={onDelete} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>{children}<div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{meta?.visibility === "players" ? "Visível aos jogadores" : "Somente mestre"}</span><button onClick={onSave} className="primary-button">Salvar ficha</button></div></div>;
+function EditorShell({ title, subtitle, meta, autosave, onFavorite, onVisibility, onDelete, onSave, children }: { title: string; subtitle: string; meta?: ContentMeta; autosave: AutosaveState; onFavorite: () => void; onVisibility: () => void; onDelete: () => void; onSave: () => void; children: React.ReactNode }) {
+  const autosaveText = autosave === "dirty" ? "● Alterações não salvas" : autosave === "saving" ? "Salvando..." : autosave === "error" ? "Erro no autosave" : "✓ Salvo automaticamente";
+  return <div className="mx-auto max-w-5xl space-y-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Ficha da mesa</p><h2 className="mt-1 text-2xl font-bold text-zinc-100">{title}</h2><p className="text-sm text-zinc-500">{subtitle}</p></div><div className="flex gap-2"><button onClick={onFavorite} className="icon-button"><Star className={`h-4 w-4 ${meta?.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={onVisibility} className="icon-button">{meta?.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={onDelete} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>{children}<div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{autosaveText} • {meta?.visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={onSave} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div></div>;
 }
 
 function CustomFields({ template, meta, onChange }: { template: SheetTemplate; meta?: ContentMeta; onChange: (values: Record<string, unknown>) => void }) {
