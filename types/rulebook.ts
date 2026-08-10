@@ -9,7 +9,8 @@ export type RuleCategory =
   | "armaduras"
   | "equipamentos"
   | "npcs"
-  | "regras-da-casa";
+  | "regras-da-casa"
+  | (string & {});
 
 export type SheetCategory =
   | "players"
@@ -20,7 +21,8 @@ export type SheetCategory =
   | "bosses"
   | "aliados"
   | "monstros"
-  | "custom";
+  | "custom"
+  | (string & {});
 
 export type Visibility = "master" | "players";
 
@@ -39,6 +41,14 @@ export type RpgSystem = {
   id: string;
   name: string;
   description: string;
+};
+
+export type RpgSystemConfig = {
+  attributes: string[];
+  resources: string[];
+  sheetCategories: string[];
+  ruleCategories: string[];
+  conditions: string[];
 };
 
 export type RpgTable = {
@@ -287,6 +297,7 @@ export type RulebookData = RulebookContent & {
   entities?: WorldEntity[];
   combats?: CombatState[];
   backups?: BackupSummary[];
+  systemConfig?: RpgSystemConfig;
 };
 
 export type OpenPanel =
