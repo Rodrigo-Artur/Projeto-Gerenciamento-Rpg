@@ -1,17 +1,18 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Settings2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { SystemConfigEditor } from "@/components/system/SystemConfigEditor";
 import type { RulebookData, SheetCategory, SheetTemplate, TemplateField, TemplateFieldType } from "@/types/rulebook";
 
 const kinds: SheetTemplate["kind"][] = ["player", "npc", "boss", "monster", "companion", "custom"];
 const fieldTypes: TemplateFieldType[] = ["text", "textarea", "number", "select", "checkbox", "list", "stats", "abilities"];
-const categories: SheetCategory[] = ["criminosos", "policia-umck", "ameacas-pesadas", "simbiontes", "bosses", "aliados", "monstros", "custom"];
+const fallbackCategories: SheetCategory[] = ["criminosos", "policia-umck", "ameacas-pesadas", "simbiontes", "bosses", "aliados", "monstros", "custom"];
 
 export function TemplatesView({ data, action }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
   const templates = data.templates ?? [];
-  const [selectedId, setSelectedId] = useState(templates[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState<string>("__config__");
   const selected = templates.find((item) => item.id === selectedId);
 
   async function createTemplate() {
@@ -34,7 +35,11 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
   return (
     <div className="grid h-full grid-cols-[320px_1fr] overflow-hidden">
       <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/60 p-4">
-        <div className="flex items-center justify-between gap-2">
+        <button onClick={() => setSelectedId("__config__")} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${selectedId === "__config__" ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}>
+          <Settings2 className="h-4 w-4 text-amber-400" />
+          <div><p className="font-medium text-zinc-200">Configuração do sistema</p><p className="text-xs text-zinc-500">Atributos, recursos e categorias</p></div>
+        </button>
+        <div className="mt-5 flex items-center justify-between gap-2">
           <div><p className="text-sm font-semibold text-zinc-200">Templates</p><p className="text-xs text-zinc-500">{templates.length} modelo(s)</p></div>
           <button onClick={() => void createTemplate()} className="icon-button"><Plus className="h-4 w-4" /></button>
         </div>
@@ -48,7 +53,8 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
         </div>
       </aside>
       <section className="overflow-y-auto p-6">
-        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : <div className="flex h-full items-center justify-center text-sm text-zinc-500">Crie um template para definir as fichas desse sistema.</div>}
+        {selectedId === "__config__" ? <SystemConfigEditor key={data.activeSystemId} data={data} action={action} /> : null}
+        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : null}
       </section>
     </div>
   );
@@ -56,6 +62,7 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
 
 function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
   const [draft, setDraft] = useState(item);
+  const categories = (data.systemConfig?.sheetCategories?.filter((item) => item !== "players") ?? fallbackCategories) as SheetCategory[];
 
   function patchField(index: number, patch: Partial<TemplateField>) {
     setDraft({ ...draft, fields: draft.fields.map((field, current) => current === index ? { ...field, ...patch } : field) });
@@ -81,7 +88,7 @@ function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: Rul
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Nome" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
         <label className="form-label">Tipo<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as SheetTemplate["kind"] })} className="field mt-2">{kinds.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-        <label className="form-label">Categoria padrão<select value={draft.defaultCategory ?? "custom"} onChange={(event) => setDraft({ ...draft, defaultCategory: event.target.value as SheetCategory })} className="field mt-2">{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+        <label className="form-label">Categoria padrão<select value={draft.defaultCategory ?? "custom"} onChange={(event) => setDraft({ ...draft, defaultCategory: event.target.value as SheetCategory })} className="field mt-2">{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
         <Field label="Descrição" value={draft.description} onChange={(value) => setDraft({ ...draft, description: value })} />
       </div>
 
@@ -89,7 +96,7 @@ function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: Rul
         <div className="flex items-center justify-between"><div><p className="font-semibold text-zinc-100">Campos da ficha</p><p className="text-xs text-zinc-500">Defina seções, tipos, opções e valores padrão.</p></div><button onClick={addField} className="secondary-button"><Plus className="h-3.5 w-3.5" />Campo</button></div>
         <div className="mt-4 space-y-3">
           {draft.fields.map((field, index) => (
-            <div key={field.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+            <div key={`${field.id}-${index}`} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
               <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_1fr_auto]">
                 <Field label="ID" value={field.id} onChange={(value) => patchField(index, { id: value })} />
                 <Field label="Rótulo" value={field.label} onChange={(value) => patchField(index, { label: value })} />
@@ -99,7 +106,7 @@ function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: Rul
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <Field label="Valor padrão" value={typeof field.defaultValue === "string" || typeof field.defaultValue === "number" ? String(field.defaultValue) : ""} onChange={(value) => patchField(index, { defaultValue: value })} />
-                <Field label="Opções (separadas por vírgula)" value={field.options?.join(", ") ?? ""} onChange={(value) => patchField(index, { options: value.split(",").map((item) => item.trim()).filter(Boolean) })} />
+                <Field label="Opções (separadas por vírgula)" value={field.options?.join(", ") ?? ""} onChange={(value) => patchField(index, { options: value.split(",").map((option) => option.trim()).filter(Boolean) })} />
                 <Field label="Ajuda" value={field.helpText ?? ""} onChange={(value) => patchField(index, { helpText: value })} />
               </div>
               <label className="mt-3 flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => patchField(index, { required: event.target.checked })} />Campo obrigatório</label>
