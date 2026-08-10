@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import type { RecentContent } from "@/hooks/useWorkspaceApi";
 import type { RulebookData } from "@/types/rulebook";
 
-type Action = <T extends Record<string, unknown>>(payload: T, options?: { reloadTableId?: string; silent?: boolean }) => Promise<RulebookData & { activeTableId?: string }>;
+type Action = (payload: Record<string, unknown>, options?: { reloadTableId?: string; silent?: boolean }) => Promise<Record<string, unknown>>;
 
 export function DashboardView({
   data,
@@ -54,7 +54,7 @@ export function DashboardView({
     });
     setTableName("");
     setTableDescription("");
-    if (result.activeTableId) onOpenTable(result.activeTableId);
+    if (typeof result.activeTableId === "string") onOpenTable(result.activeTableId);
   }
 
   async function createSystem() {
@@ -171,7 +171,7 @@ export function DashboardView({
                         </button>
                         <div className="flex gap-1">
                           <IconButton title="Editar" onClick={() => beginEditTable(table.id, table.name, table.description)}><Pencil className="h-4 w-4" /></IconButton>
-                          <IconButton title="Duplicar" onClick={async () => { const result = await action({ action: "duplicate-table", tableId: table.id, name: `${table.name} — Cópia` }); if (result.activeTableId) onOpenTable(result.activeTableId); }}><Copy className="h-4 w-4" /></IconButton>
+                          <IconButton title="Duplicar" onClick={async () => { const result = await action({ action: "duplicate-table", tableId: table.id, name: `${table.name} — Cópia` }); if (typeof result.activeTableId === "string") onOpenTable(result.activeTableId); }}><Copy className="h-4 w-4" /></IconButton>
                           {table.id !== "mesa-principal" && <IconButton title="Excluir" danger onClick={async () => { if (confirm(`Excluir a mesa ${table.name}? Um backup será criado antes.`)) await action({ action: "delete-table", tableId: table.id }); }}><Trash2 className="h-4 w-4" /></IconButton>}
                         </div>
                       </div>
