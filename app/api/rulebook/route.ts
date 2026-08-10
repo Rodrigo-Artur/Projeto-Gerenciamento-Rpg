@@ -72,6 +72,17 @@ function playerView(data: RulebookData): RulebookData {
     notes: data.notes.filter((item) => !item.isPrivate && item.visibility !== "master"),
     sessions: data.sessions.filter((item) => item.visibility === "players"),
     entities: (data.entities ?? []).filter((item) => item.visibility === "players" && !item.archived),
+    combats: (data.combats ?? []).map((combat) => ({
+      ...combat,
+      participants: combat.participants
+        .filter((participant) => !participant.hidden)
+        .map((participant) => ({
+          ...participant,
+          resources: [],
+          abilities: [],
+        })),
+    })),
+    templates: [],
     history: [],
     backups: [],
   };
@@ -99,11 +110,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ versions: getVersions(versionsType, versionsId) });
   }
 
-  ensureDailyBackup(tableId ?? "mesa-principal");
-  const data = fullData(tableId);
+  // fullData inicializa a camada avançada e suas tabelas antes do primeiro backup.
+  const initialData = fullData(tableId);
+  ensureDailyBackup(initialData.activeTableId);
+  const data = fullData(initialData.activeTableId);
+
   return NextResponse.json({
     ...(view === "players" ? playerView(data) : data),
-    recent: getRecent(data.activeTableId),
+    recent: view === "players" ? [] : getRecent(data.activeTableId),
     databaseMode: "sqlite-local-v3",
   });
 }
