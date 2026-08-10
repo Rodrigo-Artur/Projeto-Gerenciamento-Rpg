@@ -90,7 +90,8 @@ export function useWorkspaceApi(playerView = false) {
   }, [applyResponse, playerView]);
 
   useEffect(() => {
-    void load();
+    const params = new URLSearchParams(window.location.search);
+    void load(params.get("tableId") ?? undefined);
   }, [load]);
 
   const action = useCallback(async <T extends Record<string, unknown>>(payload: T, options?: { reloadTableId?: string; silent?: boolean }) => {
