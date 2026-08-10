@@ -35,12 +35,14 @@ import {
   updateSystem,
   updateTable,
 } from "@/lib/server/managementDatabase";
+import { getSystemConfig, saveSystemConfig } from "@/lib/server/systemConfigDatabase";
 import { getRulebookData } from "@/lib/server/tableSystemDatabase";
 import { restoreContentVersion } from "@/lib/server/versionRestore";
 import type {
   CombatState,
   NpcSheet,
   PlayerSheet,
+  RpgSystemConfig,
   RuleArticle,
   RulebookData,
   SessionPlan,
@@ -56,8 +58,9 @@ function queryValue(request: Request, key: string) {
   return new URL(request.url).searchParams.get(key) ?? undefined;
 }
 
-function fullData(tableId?: string) {
-  return enrichCoreData(getRulebookData(tableId));
+function fullData(tableId?: string): RulebookData {
+  const data = enrichCoreData(getRulebookData(tableId));
+  return { ...data, systemConfig: getSystemConfig(data.activeSystemId) };
 }
 
 function playerView(data: RulebookData): RulebookData {
@@ -119,6 +122,7 @@ export async function PUT(request: Request) {
   for (const template of data.templates ?? []) upsertTemplate({ ...template, systemId });
   for (const entity of data.entities ?? []) upsertEntity({ ...entity, tableId });
   for (const combat of data.combats ?? []) saveCombat({ ...combat, tableId });
+  if (data.systemConfig) saveSystemConfig(systemId, data.systemConfig);
 
   return NextResponse.json({ ...fullData(tableId), databaseMode: "sqlite-local-v3" });
 }
@@ -149,6 +153,9 @@ export async function POST(request: Request) {
         break;
       case "delete-system":
         deleteSystem(systemId);
+        break;
+      case "save-system-config":
+        saveSystemConfig(systemId, (body.config ?? {}) as Partial<RpgSystemConfig>);
         break;
 
       case "create-table": {
