@@ -1,8 +1,9 @@
 "use client";
 
-import { Archive, Eye, EyeOff, Map, Plus, Star, Trash2 } from "lucide-react";
+import { Archive, Eye, EyeOff, Map, Plus, Save, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
 import type { RulebookData, WorldEntity, WorldEntityType } from "@/types/rulebook";
 
 const types: Array<{ id: WorldEntityType; label: string }> = [
@@ -76,10 +77,13 @@ function EntityEditor({ item, data, action }: { item: WorldEntity; data: Ruleboo
   const [draft, setDraft] = useState(item);
   const [tags, setTags] = useState(item.tags.join(", "));
   const objectives = Array.isArray(draft.data?.objectives) ? draft.data?.objectives as Array<{ text: string; done: boolean }> : [];
+  const payload = useMemo<WorldEntity>(() => ({ ...draft, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean) }), [draft, tags]);
 
-  async function save(next = draft) {
-    await action({ action: "upsert-entity", tableId: data.activeTableId, systemId: data.activeSystemId, item: { ...next, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean) } });
+  async function save(next: WorldEntity) {
+    await action({ action: "upsert-entity", tableId: data.activeTableId, systemId: data.activeSystemId, item: next });
   }
+
+  const autosave = useDebouncedAutosave(payload, save, 1100);
 
   function patchObjective(index: number, patch: Partial<{ text: string; done: boolean }>) {
     const next = objectives.map((objective, current) => current === index ? { ...objective, ...patch } : objective);
@@ -88,7 +92,7 @@ function EntityEditor({ item, data, action }: { item: WorldEntity; data: Ruleboo
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">{draft.type}</p><h2 className="mt-1 text-2xl font-bold">{draft.name}</h2></div><div className="flex gap-2"><button onClick={() => { const next = { ...draft, favorite: !draft.favorite }; setDraft(next); void save(next); }} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => { const next = { ...draft, visibility: draft.visibility === "players" ? "master" as const : "players" as const }; setDraft(next); void save(next); }} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={() => { const next = { ...draft, archived: !draft.archived }; setDraft(next); void save(next); }} className="icon-button"><Archive className="h-4 w-4" /></button><button onClick={async () => { if (confirm(`Excluir ${draft.name}?`)) await action({ action: "delete-entity", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
+      <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">{draft.type}</p><h2 className="mt-1 text-2xl font-bold">{draft.name}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, favorite: !draft.favorite })} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={() => setDraft({ ...draft, archived: !draft.archived })} className="icon-button"><Archive className="h-4 w-4" /></button><button onClick={async () => { if (confirm(`Excluir ${draft.name}?`)) await action({ action: "delete-entity", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
       <div className="grid gap-3 md:grid-cols-2"><Field label="Nome" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} /><label className="form-label">Tipo<select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as WorldEntityType })} className="field mt-2">{types.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label></div>
       <Field label="Resumo" value={draft.summary} onChange={(value) => setDraft({ ...draft, summary: value })} />
       <Field label="Tags" value={tags} onChange={setTags} />
@@ -98,7 +102,7 @@ function EntityEditor({ item, data, action }: { item: WorldEntity; data: Ruleboo
 
       {draft.type === "timeline" && <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"><Field label="Data / Dia da campanha" value={String(draft.data?.date ?? "")} onChange={(value) => setDraft({ ...draft, data: { ...draft.data, date: value } })} /></div>}
 
-      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{draft.visibility === "players" ? "Visível aos jogadores" : "Somente mestre"}</span><button onClick={() => void save()} className="primary-button">Salvar</button></div>
+      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{autosave === "dirty" ? "● Alterações não salvas" : autosave === "saving" ? "Salvando..." : autosave === "error" ? "Erro no autosave" : "✓ Salvo automaticamente"} • {draft.visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={() => void save(payload)} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div>
     </div>
   );
 }
