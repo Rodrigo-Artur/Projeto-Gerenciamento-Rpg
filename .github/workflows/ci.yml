@@ -28,3 +28,5 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # This branch exists only to validate the full v3 workspace through pull-request CI.
