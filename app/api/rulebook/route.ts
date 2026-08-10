@@ -27,6 +27,13 @@ import {
   upsertSession,
   upsertTemplate,
 } from "@/lib/server/advancedDatabase";
+import {
+  deleteSystem,
+  deleteTable,
+  duplicateTable,
+  updateSystem,
+  updateTable,
+} from "@/lib/server/managementDatabase";
 import { getRulebookData } from "@/lib/server/tableSystemDatabase";
 import type {
   CombatState,
@@ -100,8 +107,7 @@ export async function PUT(request: Request) {
   const tableId = data.activeTableId || queryValue(request, "tableId") || "mesa-principal";
   const systemId = data.activeSystemId || "kaiju-rpg";
 
-  // Compatibilidade com imports/clients antigos: PUT agora apenas cria/atualiza.
-  // Ausência de um item no payload NÃO apaga mais registros do banco.
+  // Compatibilidade: PUT apenas cria/atualiza. Ausência no payload nunca significa exclusão.
   for (const rule of data.rules ?? []) upsertRule(systemId, rule);
   for (const npc of data.npcs ?? []) upsertNpc(tableId, npc);
   for (const player of data.players ?? []) upsertPlayer(tableId, player);
@@ -123,104 +129,133 @@ export async function POST(request: Request) {
   const tableId = body.tableId || "mesa-principal";
   const systemId = body.systemId || "kaiju-rpg";
 
-  switch (body.action) {
-    case "create-system": {
-      const system = createSystemAdvanced({
-        name: String(body.name || "Novo sistema").trim(),
-        description: String(body.description || "Sistema criado pelo Mesa do Mestre.").trim(),
-        mode: body.mode === "clone" ? "clone" : "blank",
-        sourceSystemId: typeof body.sourceSystemId === "string" ? body.sourceSystemId : undefined,
-      });
-      return NextResponse.json({ ...fullData(tableId), createdSystemId: system.id, databaseMode: "sqlite-local-v3" });
+  try {
+    switch (body.action) {
+      case "create-system": {
+        const system = createSystemAdvanced({
+          name: String(body.name || "Novo sistema").trim(),
+          description: String(body.description || "Sistema criado pelo Mesa do Mestre.").trim(),
+          mode: body.mode === "clone" ? "clone" : "blank",
+          sourceSystemId: typeof body.sourceSystemId === "string" ? body.sourceSystemId : undefined,
+        });
+        return NextResponse.json({ ...fullData(tableId), createdSystemId: system.id, databaseMode: "sqlite-local-v3" });
+      }
+
+      case "update-system":
+        updateSystem({ id: systemId, name: typeof body.name === "string" ? body.name : undefined, description: typeof body.description === "string" ? body.description : undefined });
+        break;
+      case "delete-system":
+        deleteSystem(systemId);
+        break;
+
+      case "create-table": {
+        const table = createTableAdvanced({
+          name: String(body.name || "Nova mesa").trim(),
+          description: String(body.description || "Nova campanha.").trim(),
+          systemId,
+        });
+        return NextResponse.json({ ...fullData(table.id), databaseMode: "sqlite-local-v3" });
+      }
+      case "update-table":
+        updateTable({
+          id: tableId,
+          name: typeof body.name === "string" ? body.name : undefined,
+          description: typeof body.description === "string" ? body.description : undefined,
+          systemId: typeof body.newSystemId === "string" ? body.newSystemId : undefined,
+        });
+        break;
+      case "duplicate-table": {
+        const table = duplicateTable(tableId, typeof body.name === "string" ? body.name : undefined);
+        return NextResponse.json({ ...fullData(table.id), databaseMode: "sqlite-local-v3" });
+      }
+      case "delete-table":
+        deleteTable(tableId);
+        return NextResponse.json({ ...fullData("mesa-principal"), databaseMode: "sqlite-local-v3" });
+
+      case "upsert-rule":
+        upsertRule(systemId, body.item as RuleArticle);
+        break;
+      case "upsert-npc":
+        upsertNpc(tableId, body.item as NpcSheet);
+        break;
+      case "upsert-player":
+        upsertPlayer(tableId, body.item as PlayerSheet);
+        break;
+      case "upsert-note":
+        upsertNote(tableId, body.item as TableNote);
+        break;
+      case "upsert-session":
+        upsertSession(tableId, body.item as SessionPlan);
+        break;
+      case "upsert-template":
+        upsertTemplate({ ...(body.item as SheetTemplate), systemId });
+        break;
+      case "upsert-entity":
+        upsertEntity({ ...(body.item as WorldEntity), tableId });
+        break;
+      case "save-combat":
+        saveCombat({ ...(body.item as CombatState), tableId });
+        break;
+
+      case "delete-rule":
+        deleteCoreContent({ type: "rule", id: String(body.id), systemId });
+        break;
+      case "delete-npc":
+        deleteCoreContent({ type: "npc", id: String(body.id), tableId });
+        break;
+      case "delete-player":
+        deleteCoreContent({ type: "player", id: String(body.id), tableId });
+        break;
+      case "delete-note":
+        deleteExtra(tableId, "note", String(body.id));
+        break;
+      case "delete-session":
+        deleteExtra(tableId, "session", String(body.id));
+        break;
+      case "delete-template":
+        deleteTemplate(systemId, String(body.id));
+        break;
+      case "delete-entity":
+        deleteEntity(tableId, String(body.id));
+        break;
+      case "delete-combat":
+        deleteCombat(tableId, String(body.id));
+        break;
+
+      case "record-recent":
+        recordRecent(tableId, String(body.contentType), String(body.contentId), String(body.contentName));
+        return NextResponse.json({ ok: true });
+
+      case "backup":
+        createAutomaticBackup(tableId, String(body.reason || "Backup manual"));
+        break;
+
+      case "restore-backup":
+        restoreBackup(tableId, String(body.backupId));
+        break;
+
+      case "import-preview":
+        return NextResponse.json(previewImport(tableId, body.payload));
+
+      case "import-package":
+        importPackage({
+          tableId,
+          payload: body.payload,
+          mode: body.mode === "replace" ? "replace" : "merge",
+          conflict: body.conflict === "replace" || body.conflict === "copy" ? body.conflict : "skip",
+          sections: Array.isArray(body.sections) ? body.sections as Array<"rules" | "npcs" | "players" | "notes" | "sessions" | "templates" | "entities"> : undefined,
+        });
+        break;
+
+      default:
+        return NextResponse.json({ ...fullData(tableId), databaseMode: "sqlite-local-v3" });
     }
 
-    case "create-table": {
-      const table = createTableAdvanced({
-        name: String(body.name || "Nova mesa").trim(),
-        description: String(body.description || "Nova campanha.").trim(),
-        systemId,
-      });
-      return NextResponse.json({ ...fullData(table.id), databaseMode: "sqlite-local-v3" });
-    }
-
-    case "upsert-rule":
-      upsertRule(systemId, body.item as RuleArticle);
-      break;
-    case "upsert-npc":
-      upsertNpc(tableId, body.item as NpcSheet);
-      break;
-    case "upsert-player":
-      upsertPlayer(tableId, body.item as PlayerSheet);
-      break;
-    case "upsert-note":
-      upsertNote(tableId, body.item as TableNote);
-      break;
-    case "upsert-session":
-      upsertSession(tableId, body.item as SessionPlan);
-      break;
-    case "upsert-template":
-      upsertTemplate({ ...(body.item as SheetTemplate), systemId });
-      break;
-    case "upsert-entity":
-      upsertEntity({ ...(body.item as WorldEntity), tableId });
-      break;
-    case "save-combat":
-      saveCombat({ ...(body.item as CombatState), tableId });
-      break;
-
-    case "delete-rule":
-      deleteCoreContent({ type: "rule", id: String(body.id), systemId });
-      break;
-    case "delete-npc":
-      deleteCoreContent({ type: "npc", id: String(body.id), tableId });
-      break;
-    case "delete-player":
-      deleteCoreContent({ type: "player", id: String(body.id), tableId });
-      break;
-    case "delete-note":
-      deleteExtra(tableId, "note", String(body.id));
-      break;
-    case "delete-session":
-      deleteExtra(tableId, "session", String(body.id));
-      break;
-    case "delete-template":
-      deleteTemplate(systemId, String(body.id));
-      break;
-    case "delete-entity":
-      deleteEntity(tableId, String(body.id));
-      break;
-    case "delete-combat":
-      deleteCombat(tableId, String(body.id));
-      break;
-
-    case "record-recent":
-      recordRecent(tableId, String(body.contentType), String(body.contentId), String(body.contentName));
-      return NextResponse.json({ ok: true });
-
-    case "backup":
-      createAutomaticBackup(tableId, String(body.reason || "Backup manual"));
-      break;
-
-    case "restore-backup":
-      restoreBackup(tableId, String(body.backupId));
-      break;
-
-    case "import-preview":
-      return NextResponse.json(previewImport(tableId, body.payload));
-
-    case "import-package":
-      importPackage({
-        tableId,
-        payload: body.payload,
-        mode: body.mode === "replace" ? "replace" : "merge",
-        conflict: body.conflict === "replace" || body.conflict === "copy" ? body.conflict : "skip",
-        sections: Array.isArray(body.sections) ? body.sections as Array<"rules" | "npcs" | "players" | "notes" | "sessions" | "templates" | "entities"> : undefined,
-      });
-      break;
-
-    default:
-      return NextResponse.json({ ...fullData(tableId), databaseMode: "sqlite-local-v3" });
+    return NextResponse.json({ ...fullData(tableId), databaseMode: "sqlite-local-v3" });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Falha ao executar operação." },
+      { status: 400 }
+    );
   }
-
-  return NextResponse.json({ ...fullData(tableId), databaseMode: "sqlite-local-v3" });
 }
