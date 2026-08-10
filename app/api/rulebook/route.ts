@@ -27,6 +27,7 @@ import {
   upsertSession,
   upsertTemplate,
 } from "@/lib/server/advancedDatabase";
+import { ensureDailyBackup } from "@/lib/server/backupMaintenance";
 import {
   deleteSystem,
   deleteTable,
@@ -35,6 +36,7 @@ import {
   updateTable,
 } from "@/lib/server/managementDatabase";
 import { getRulebookData } from "@/lib/server/tableSystemDatabase";
+import { restoreContentVersion } from "@/lib/server/versionRestore";
 import type {
   CombatState,
   NpcSheet,
@@ -94,6 +96,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ versions: getVersions(versionsType, versionsId) });
   }
 
+  ensureDailyBackup(tableId ?? "mesa-principal");
   const data = fullData(tableId);
   return NextResponse.json({
     ...(view === "players" ? playerView(data) : data),
@@ -232,6 +235,16 @@ export async function POST(request: Request) {
 
       case "restore-backup":
         restoreBackup(tableId, String(body.backupId));
+        break;
+
+      case "restore-version":
+        restoreContentVersion({
+          versionId: String(body.versionId),
+          contentType: String(body.contentType),
+          contentId: String(body.contentId),
+          tableId,
+          systemId,
+        });
         break;
 
       case "import-preview":
