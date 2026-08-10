@@ -9,6 +9,9 @@ import {
   History,
   LayoutDashboard,
   Map,
+  Maximize2,
+  Minimize2,
+  Rows3,
   Search,
   Settings2,
   Swords,
@@ -48,10 +51,20 @@ export function SystemWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const currentTable = data.tables.find((item) => item.id === data.activeTableId);
   const currentSystem = data.systems.find((item) => item.id === data.activeSystemId) ?? data.systems.find((item) => item.id === currentTable?.systemId);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("mesa-do-mestre-compact");
+    setCompact(saved === "1");
+    const onFullscreen = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreen);
+    return () => document.removeEventListener("fullscreenchange", onFullscreen);
+  }, []);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -60,10 +73,18 @@ export function SystemWorkspace() {
         searchRef.current?.focus();
         setSearchOpen(true);
       }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        openPlayerView();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        toggleCompact();
+      }
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, []);
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -123,8 +144,24 @@ export function SystemWorkspace() {
     window.open(`/player?tableId=${encodeURIComponent(data.activeTableId)}`, "mesa-do-mestre-player-view");
   }
 
+  function toggleCompact() {
+    setCompact((current) => {
+      const next = !current;
+      window.localStorage.setItem("mesa-do-mestre-compact", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
+  }
+
   return (
-    <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <main className={`flex min-h-screen flex-col bg-zinc-950 text-zinc-100 ${compact ? "compact-workspace" : ""}`}>
       <header className="relative z-40 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur">
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={() => setView("dashboard")} className="mr-2 text-left">
@@ -165,7 +202,9 @@ export function SystemWorkspace() {
 
           <button onClick={() => setImportOpen(true)} className="top-action-button"><Upload className="h-4 w-4" />Importar</button>
           <button onClick={() => void exportCurrent()} className="top-action-button"><Download className="h-4 w-4" />Exportar</button>
-          <button onClick={openPlayerView} className="top-action-button"><Eye className="h-4 w-4" />Tela jogador</button>
+          <button onClick={openPlayerView} className="top-action-button" title="Ctrl+Shift+P"><Eye className="h-4 w-4" />Tela jogador</button>
+          <button onClick={toggleCompact} className="icon-button" title="Modo compacto — Ctrl+Shift+C"><Rows3 className="h-4 w-4" /></button>
+          <button onClick={() => void toggleFullscreen()} className="icon-button" title="Tela cheia">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
           <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${status.toLowerCase().includes("erro") || status.toLowerCase().includes("falha") ? "border-red-500/40 text-red-300" : "border-emerald-500/30 text-emerald-300"}`}>
             <Database className="h-3.5 w-3.5" />{loading ? "Carregando..." : status}
           </span>
