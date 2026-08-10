@@ -144,6 +144,31 @@ button:disabled {
   color: rgb(113 113 122);
 }
 
+.compact-workspace .field {
+  padding: 0.42rem 0.55rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.compact-workspace .primary-button,
+.compact-workspace .secondary-button,
+.compact-workspace .top-action-button {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.7rem;
+}
+
+.compact-workspace .icon-button {
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  padding: 0.3rem;
+}
+
+.compact-workspace article,
+.compact-workspace section,
+.compact-workspace aside {
+  --compact-scale: 0.94;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(63 63 70) rgb(9 9 11);
