@@ -29,6 +29,7 @@ export type ContentMeta = {
   favorite?: boolean;
   archived?: boolean;
   templateId?: string;
+  customFields?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
   lastOpenedAt?: string;
@@ -282,10 +283,10 @@ export type RulebookData = RulebookContent & {
   activeTableId: string;
   activeSystemId: string;
   history: ActivityEntry[];
-  templates: SheetTemplate[];
-  entities: WorldEntity[];
-  combats: CombatState[];
-  backups: BackupSummary[];
+  templates?: SheetTemplate[];
+  entities?: WorldEntity[];
+  combats?: CombatState[];
+  backups?: BackupSummary[];
 };
 
 export type OpenPanel =
