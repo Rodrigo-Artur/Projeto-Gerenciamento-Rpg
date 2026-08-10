@@ -56,6 +56,7 @@ function normalize(data: Partial<RulebookData>): RulebookData {
     entities: data.entities ?? [],
     combats: data.combats ?? [],
     backups: data.backups ?? [],
+    systemConfig: data.systemConfig,
   };
 }
 
