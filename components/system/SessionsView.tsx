@@ -1,8 +1,9 @@
 "use client";
 
-import { Eye, EyeOff, Link2, NotebookPen, Plus, Star, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Link2, NotebookPen, Plus, Save, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
 import type { ContentRef, RulebookData, SessionPlan, TableNote } from "@/types/rulebook";
 
 export function SessionsView({
@@ -85,19 +86,18 @@ function SessionEditor({ item, data, action }: { item: SessionPlan; data: Rulebo
     ...(data.entities ?? []).map((entry) => ({ type: "entity" as const, id: entry.id, label: `${entry.type}: ${entry.name}` })),
   ], [data]);
   const linked = draft.linkedItems ?? [];
+  const payload = useMemo<SessionPlan>(() => ({
+    ...draft,
+    scenes: scenes.split("\n").map((line) => line.trim()).filter(Boolean),
+    notes: notes.split("\n").map((line) => line.trim()).filter(Boolean),
+    linkedRefs: linked.map((ref) => ref.label ?? ref.id),
+  }), [draft, linked, notes, scenes]);
 
-  async function save() {
-    await action({
-      action: "upsert-session",
-      tableId: data.activeTableId,
-      item: {
-        ...draft,
-        scenes: scenes.split("\n").map((line) => line.trim()).filter(Boolean),
-        notes: notes.split("\n").map((line) => line.trim()).filter(Boolean),
-        linkedRefs: linked.map((ref) => ref.label ?? ref.id),
-      },
-    });
+  async function save(next: SessionPlan) {
+    await action({ action: "upsert-session", tableId: data.activeTableId, item: next });
   }
+
+  const autosave = useDebouncedAutosave(payload, save, 1100);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -109,15 +109,15 @@ function SessionEditor({ item, data, action }: { item: SessionPlan; data: Rulebo
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
         <div className="flex items-center gap-2"><Link2 className="h-4 w-4 text-amber-400" /><p className="font-semibold text-zinc-100">Conteúdo ligado</p></div>
-        <select className="field mt-3" value="" onChange={(event) => { const ref = allRefs.find((item) => `${item.type}:${item.id}` === event.target.value); if (ref && !linked.some((item) => item.type === ref.type && item.id === ref.id)) setDraft({ ...draft, linkedItems: [...linked, ref] }); }}>
+        <select className="field mt-3" value="" onChange={(event) => { const ref = allRefs.find((entry) => `${entry.type}:${entry.id}` === event.target.value); if (ref && !linked.some((entry) => entry.type === ref.type && entry.id === ref.id)) setDraft({ ...draft, linkedItems: [...linked, ref] }); }}>
           <option value="">Adicionar regra, ficha ou item...</option>
           {allRefs.map((ref) => <option key={`${ref.type}:${ref.id}`} value={`${ref.type}:${ref.id}`}>{ref.label}</option>)}
         </select>
-        <div className="mt-3 flex flex-wrap gap-2">{linked.map((ref) => <button key={`${ref.type}:${ref.id}`} onClick={() => setDraft({ ...draft, linkedItems: linked.filter((item) => !(item.type === ref.type && item.id === ref.id)) })} className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-red-500/50">{ref.label ?? ref.id} ×</button>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{linked.map((ref) => <button key={`${ref.type}:${ref.id}`} onClick={() => setDraft({ ...draft, linkedItems: linked.filter((entry) => !(entry.type === ref.type && entry.id === ref.id)) })} className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-red-500/50">{ref.label ?? ref.id} ×</button>)}</div>
       </div>
 
       <label className="form-label block">Notas e ganchos — uma por linha<textarea className="field mt-2" rows={7} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-      <div className="flex justify-end"><button onClick={() => void save()} className="primary-button">Salvar sessão</button></div>
+      <SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} />
     </div>
   );
 }
@@ -125,20 +125,32 @@ function SessionEditor({ item, data, action }: { item: SessionPlan; data: Rulebo
 function NoteEditor({ item, data, action }: { item: TableNote; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
   const [draft, setDraft] = useState(item);
   const [tags, setTags] = useState(item.tags?.join(", ") ?? "");
+  const payload = useMemo<TableNote>(() => ({
+    ...draft,
+    tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+    isPrivate: draft.visibility !== "players",
+  }), [draft, tags]);
 
-  async function save(next = draft) {
-    await action({ action: "upsert-note", tableId: data.activeTableId, item: { ...next, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), isPrivate: next.visibility !== "players" } });
+  async function save(next: TableNote) {
+    await action({ action: "upsert-note", tableId: data.activeTableId, item: next });
   }
+
+  const autosave = useDebouncedAutosave(payload, save, 1100);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-amber-400"><NotebookPen className="h-4 w-4" />Anotação da mesa</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => { const next = { ...draft, favorite: !draft.favorite }; setDraft(next); void save(next); }} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => { const next = { ...draft, visibility: draft.visibility === "players" ? "master" as const : "players" as const, isPrivate: draft.visibility === "players" }; setDraft(next); void save(next); }} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (confirm(`Excluir ${draft.title}?`)) await action({ action: "delete-note", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
+      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-amber-400"><NotebookPen className="h-4 w-4" />Anotação da mesa</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, favorite: !draft.favorite })} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players", isPrivate: draft.visibility === "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (confirm(`Excluir ${draft.title}?`)) await action({ action: "delete-note", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
       <Field label="Título" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} />
       <Field label="Tags" value={tags} onChange={setTags} />
       <label className="form-label block">Conteúdo<textarea className="field mt-2 min-h-[420px]" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
-      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{draft.visibility === "players" ? "Visível aos jogadores" : "Somente mestre"}</span><button onClick={() => void save()} className="primary-button">Salvar nota</button></div>
+      <SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} />
     </div>
   );
+}
+
+function SaveBar({ state, visibility, onSave }: { state: ReturnType<typeof useDebouncedAutosave>; visibility?: "master" | "players"; onSave: () => void }) {
+  const text = state === "dirty" ? "● Alterações não salvas" : state === "saving" ? "Salvando..." : state === "error" ? "Erro no autosave" : "✓ Salvo automaticamente";
+  return <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{text} • {visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={onSave} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div>;
 }
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
