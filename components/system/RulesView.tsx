@@ -1,11 +1,12 @@
 "use client";
 
-import { Eye, EyeOff, Plus, Star, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Plus, Save, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
 import type { RuleArticle, RuleCategory, RulebookData } from "@/types/rulebook";
 
-const categories: RuleCategory[] = ["combate", "testes", "atributos", "defesa-dano", "personagem", "progressao", "habilidades", "armaduras", "equipamentos", "npcs", "regras-da-casa"];
+const fallbackCategories: RuleCategory[] = ["combate", "testes", "atributos", "defesa-dano", "personagem", "progressao", "habilidades", "armaduras", "equipamentos", "npcs", "regras-da-casa"];
 
 export function RulesView({
   data,
@@ -27,9 +28,10 @@ export function RulesView({
   }
 
   async function createRule() {
+    const category = (data.systemConfig?.ruleCategories?.[0] ?? "regras-da-casa") as RuleCategory;
     const item: RuleArticle = {
       id: `rule-${Date.now()}`,
-      category: "regras-da-casa",
+      category,
       title: "Nova regra",
       summary: "Resumo da regra.",
       content: "Descreva a regra aqui.",
@@ -69,21 +71,26 @@ export function RulesView({
 function RuleEditor({ rule, data, action }: { rule: RuleArticle; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
   const [draft, setDraft] = useState(rule);
   const [tagsText, setTagsText] = useState(rule.tags.join(", "));
+  const categories = (data.systemConfig?.ruleCategories ?? fallbackCategories) as RuleCategory[];
+  const payload = useMemo(() => ({ ...draft, tags: tagsText.split(",").map((item) => item.trim()).filter(Boolean) }), [draft, tagsText]);
 
-  async function save() {
-    await action({ action: "upsert-rule", systemId: data.activeSystemId, tableId: data.activeTableId, item: { ...draft, tags: tagsText.split(",").map((item) => item.trim()).filter(Boolean) } });
+  async function saveRule(next: RuleArticle) {
+    await action({ action: "upsert-rule", systemId: data.activeSystemId, tableId: data.activeTableId, item: next });
   }
 
+  const autosave = useDebouncedAutosave(payload, saveRule, 1000);
+
   async function toggleFavorite() {
-    const next = { ...draft, meta: { ...draft.meta, favorite: !draft.meta?.favorite } };
+    const next: RuleArticle = { ...draft, meta: { ...draft.meta, favorite: !draft.meta?.favorite } };
     setDraft(next);
-    await action({ action: "upsert-rule", systemId: data.activeSystemId, tableId: data.activeTableId, item: next });
+    await saveRule({ ...next, tags: tagsText.split(",").map((item) => item.trim()).filter(Boolean) });
   }
 
   async function toggleVisibility() {
-    const next = { ...draft, meta: { ...draft.meta, visibility: draft.meta?.visibility === "players" ? "master" : "players" as const } };
+    const visibility = draft.meta?.visibility === "players" ? "master" : "players";
+    const next: RuleArticle = { ...draft, meta: { ...draft.meta, visibility } };
     setDraft(next);
-    await action({ action: "upsert-rule", systemId: data.activeSystemId, tableId: data.activeTableId, item: next });
+    await saveRule({ ...next, tags: tagsText.split(",").map((item) => item.trim()).filter(Boolean) });
   }
 
   return (
@@ -98,14 +105,14 @@ function RuleEditor({ rule, data, action }: { rule: RuleArticle; data: RulebookD
       </div>
       <label className="form-label">Título<input className="field mt-2" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="form-label">Categoria<select className="field mt-2" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as RuleCategory })}>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="form-label">Categoria<select className="field mt-2" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as RuleCategory })}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="form-label">Tags<input className="field mt-2" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="combate, crítico, casa" /></label>
       </div>
       <label className="form-label">Resumo<textarea className="field mt-2" rows={3} value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
       <label className="form-label">Conteúdo<textarea className="field mt-2 min-h-[360px]" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
       <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500">
-        <span>{draft.meta?.visibility === "players" ? "Visível no modo jogador" : "Somente mestre"}</span>
-        <button onClick={() => void save()} className="primary-button">Salvar regra</button>
+        <span>{autosave === "dirty" ? "● Alterações não salvas" : autosave === "saving" ? "Salvando..." : autosave === "error" ? "Erro no autosave" : "✓ Salvo automaticamente"} • {draft.meta?.visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span>
+        <button onClick={() => void saveRule(payload)} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button>
       </div>
     </div>
   );
