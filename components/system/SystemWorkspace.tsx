@@ -8,9 +8,11 @@ import {
   Eye,
   History,
   LayoutDashboard,
+  Lock,
   Map,
   Maximize2,
   Minimize2,
+  Pencil,
   Rows3,
   Search,
   Settings2,
@@ -18,7 +20,14 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  type ClipboardEvent as ReactClipboardEvent,
+  type FormEvent as ReactFormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { CombatView } from "@/components/system/CombatView";
 import { DashboardView } from "@/components/system/DashboardView";
@@ -44,6 +53,18 @@ const navigation: Array<{ id: ViewId; label: string; icon: typeof LayoutDashboar
   { id: "history", label: "Histórico", icon: History },
 ];
 
+function protectedFieldFromTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return null;
+  const field = target.closest("input, textarea, select");
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return null;
+
+  if (field instanceof HTMLInputElement && field.placeholder.toLowerCase().includes("filtrar")) {
+    return null;
+  }
+
+  return field;
+}
+
 export function SystemWorkspace() {
   const { data, recent, status, loading, load, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
   const [view, setView] = useState<ViewId>("dashboard");
@@ -53,6 +74,7 @@ export function SystemWorkspace() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const currentTable = data.tables.find((item) => item.id === data.activeTableId);
@@ -80,6 +102,10 @@ export function SystemWorkspace() {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "c") {
         event.preventDefault();
         toggleCompact();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setEditMode((current) => !current);
       }
     }
     window.addEventListener("keydown", handleShortcut);
@@ -160,6 +186,36 @@ export function SystemWorkspace() {
     }
   }
 
+  function protectReadModeFormEvent(event: ReactFormEvent<HTMLElement>) {
+    if (editMode || !protectedFieldFromTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function protectReadModeClipboard(event: ReactClipboardEvent<HTMLElement>) {
+    if (editMode || !protectedFieldFromTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function protectReadModeKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (editMode) return;
+    const field = protectedFieldFromTarget(event.target);
+    if (!field) return;
+
+    const key = event.key.toLowerCase();
+    const command = event.ctrlKey || event.metaKey;
+    if (command && (key === "c" || key === "a")) return;
+    if (key === "tab") return;
+
+    if (!(field instanceof HTMLSelectElement) && ["arrowleft", "arrowright", "arrowup", "arrowdown", "home", "end", "pageup", "pagedown"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   return (
     <main className={`flex min-h-screen flex-col bg-zinc-950 text-zinc-100 ${compact ? "compact-workspace" : ""}`}>
       <header className="relative z-40 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur">
@@ -200,7 +256,24 @@ export function SystemWorkspace() {
             )}
           </div>
 
-          <button onClick={() => setImportOpen(true)} className="top-action-button"><Upload className="h-4 w-4" />Importar</button>
+          <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1" aria-label="Modo do sistema">
+            <button
+              onClick={() => setEditMode(false)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${!editMode ? "bg-emerald-500/15 text-emerald-300" : "text-zinc-500 hover:text-zinc-300"}`}
+              title="Modo leitura: protege os campos contra alterações"
+            >
+              <Lock className="h-3.5 w-3.5" />Leitura
+            </button>
+            <button
+              onClick={() => setEditMode(true)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${editMode ? "bg-amber-500 text-zinc-950" : "text-zinc-500 hover:text-zinc-300"}`}
+              title="Modo edição — Ctrl+Shift+E"
+            >
+              <Pencil className="h-3.5 w-3.5" />Edição
+            </button>
+          </div>
+
+          <button disabled={!editMode} onClick={() => setImportOpen(true)} className="top-action-button" title={editMode ? "Importar conteúdo" : "Ative o modo edição para importar"}><Upload className="h-4 w-4" />Importar</button>
           <button onClick={() => void exportCurrent()} className="top-action-button"><Download className="h-4 w-4" />Exportar</button>
           <button onClick={openPlayerView} className="top-action-button" title="Ctrl+Shift+P"><Eye className="h-4 w-4" />Tela jogador</button>
           <button onClick={toggleCompact} className="icon-button" title="Modo compacto — Ctrl+Shift+C"><Rows3 className="h-4 w-4" /></button>
@@ -222,7 +295,13 @@ export function SystemWorkspace() {
         </nav>
       </header>
 
-      <section className="min-h-0 flex-1 overflow-hidden">
+      <section
+        className={`workspace-content min-h-0 flex-1 overflow-hidden ${editMode ? "workspace-editing" : "workspace-readonly"}`}
+        onBeforeInputCapture={protectReadModeFormEvent}
+        onPasteCapture={protectReadModeClipboard}
+        onCutCapture={protectReadModeClipboard}
+        onKeyDownCapture={protectReadModeKeyDown}
+      >
         {view === "dashboard" && <div className="h-[calc(100vh-118px)] overflow-y-auto"><DashboardView data={data} recent={recent} action={runAction} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
         {view === "rules" && <div className="h-[calc(100vh-118px)]"><RulesView data={data} action={runAction} onOpened={opened} /></div>}
         {view === "sheets" && <div className="h-[calc(100vh-118px)]"><SheetsView data={data} action={runAction} onOpened={opened} /></div>}
@@ -233,7 +312,7 @@ export function SystemWorkspace() {
         {view === "history" && <div className="h-[calc(100vh-118px)] overflow-y-auto"><HistoryView data={data} action={runAction} /></div>}
       </section>
 
-      {importOpen && (
+      {importOpen && editMode && (
         <ImportDialog
           data={data}
           action={runAction}
