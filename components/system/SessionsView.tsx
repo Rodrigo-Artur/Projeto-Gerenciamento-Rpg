@@ -1,162 +1,48 @@
 "use client";
 
 import { Eye, EyeOff, Link2, NotebookPen, Plus, Save, Star, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
 import type { ContentRef, RulebookData, SessionPlan, TableNote } from "@/types/rulebook";
 
-export function SessionsView({
-  data,
-  action,
-  onOpened,
-}: {
-  data: RulebookData;
-  action: (payload: Record<string, unknown>) => Promise<unknown>;
-  onOpened: (type: string, id: string, name: string) => void;
-}) {
-  const [mode, setMode] = useState<"sessions" | "notes">("sessions");
-  const [selectedId, setSelectedId] = useState(data.sessions[0]?.id ?? data.notes[0]?.id ?? "");
+export function SessionsView({ data, action, onOpened, focusId }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusId?: string }) {
+  const focusedSession = focusId ? data.sessions.find((item) => item.id === focusId) : undefined;
+  const focusedNote = focusId ? data.notes.find((item) => item.id === focusId) : undefined;
+  const [mode, setMode] = useState<"sessions" | "notes">(focusedNote ? "notes" : "sessions");
+  const [selectedId, setSelectedId] = useState(focusId ?? data.sessions[0]?.id ?? data.notes[0]?.id ?? "");
+  useEffect(() => { if (focusedSession) { setMode("sessions"); setSelectedId(focusedSession.id); } else if (focusedNote) { setMode("notes"); setSelectedId(focusedNote.id); } }, [focusedNote, focusedSession]);
   const selectedSession = data.sessions.find((item) => item.id === selectedId);
   const selectedNote = data.notes.find((item) => item.id === selectedId);
 
-  async function createSession() {
-    const item: SessionPlan = {
-      id: `session-${Date.now()}`,
-      title: `Sessão ${data.sessions.length + 1}`,
-      summary: "Objetivo principal da sessão.",
-      scenes: ["Cena de abertura"],
-      linkedRefs: [],
-      linkedItems: [],
-      notes: ["Gancho final"],
-      status: "planned",
-      sessionNumber: data.sessions.length + 1,
-      visibility: "master",
-    };
-    await action({ action: "upsert-session", tableId: data.activeTableId, item });
-    setMode("sessions");
-    setSelectedId(item.id);
-  }
+  async function createSession() { const item: SessionPlan = { id: `session-${Date.now()}`, title: `Sessão ${data.sessions.length + 1}`, summary: "Objetivo principal da sessão.", scenes: ["Cena de abertura"], linkedRefs: [], linkedItems: [], notes: ["Gancho final"], status: "planned", sessionNumber: data.sessions.length + 1, visibility: "master" }; await action({ action: "upsert-session", tableId: data.activeTableId, item }); setMode("sessions"); setSelectedId(item.id); onOpened("session", item.id, item.title); }
+  async function createNote() { const item: TableNote = { id: `note-${Date.now()}`, title: "Nova anotação", content: "Escreva pistas, segredos e pendências.", isPrivate: true, favorite: false, tags: [], visibility: "master" }; await action({ action: "upsert-note", tableId: data.activeTableId, item }); setMode("notes"); setSelectedId(item.id); onOpened("note", item.id, item.title); }
 
-  async function createNote() {
-    const item: TableNote = {
-      id: `note-${Date.now()}`,
-      title: "Nova anotação",
-      content: "Escreva pistas, segredos e pendências.",
-      isPrivate: true,
-      favorite: false,
-      tags: [],
-      visibility: "master",
-    };
-    await action({ action: "upsert-note", tableId: data.activeTableId, item });
-    setMode("notes");
-    setSelectedId(item.id);
-  }
-
-  return (
-    <div className="grid h-full grid-cols-[330px_1fr] overflow-hidden">
-      <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/60 p-4">
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
-          <button onClick={() => setMode("sessions")} className={`rounded-md px-3 py-2 text-sm ${mode === "sessions" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}>Sessões</button>
-          <button onClick={() => setMode("notes")} className={`rounded-md px-3 py-2 text-sm ${mode === "notes" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}>Notas</button>
-        </div>
-        <button onClick={() => void (mode === "sessions" ? createSession() : createNote())} className="secondary-button mt-3 w-full"><Plus className="h-3.5 w-3.5" />{mode === "sessions" ? "Preparar sessão" : "Nova nota"}</button>
-        <div className="mt-4 space-y-2">
-          {mode === "sessions" ? data.sessions.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("session", item.id, item.title); }} className={`w-full rounded-lg border p-3 text-left ${selectedSession?.id === item.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}><p className="font-medium text-zinc-200">{item.title}</p><p className="mt-1 text-xs text-zinc-500">{item.status ?? "planned"} • {item.summary}</p></button>) : data.notes.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("note", item.id, item.title); }} className={`w-full rounded-lg border p-3 text-left ${selectedNote?.id === item.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}><div className="flex items-center justify-between"><p className="font-medium text-zinc-200">{item.title}</p>{item.favorite && <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />}</div><p className="mt-1 text-xs text-zinc-500">{item.isPrivate ? "Privada" : "Compartilhável"}</p></button>)}
-        </div>
-      </aside>
-      <section className="overflow-y-auto p-6">
-        {mode === "sessions" && selectedSession ? <SessionEditor key={selectedSession.id} item={selectedSession} data={data} action={action} /> : null}
-        {mode === "notes" && selectedNote ? <NoteEditor key={selectedNote.id} item={selectedNote} data={data} action={action} /> : null}
-        {mode === "sessions" && !selectedSession ? <Empty /> : null}
-        {mode === "notes" && !selectedNote ? <Empty /> : null}
-      </section>
-    </div>
-  );
+  return <div className="grid h-full grid-cols-[330px_1fr] overflow-hidden"><aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/60 p-4"><div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-1"><button onClick={() => setMode("sessions")} className={`rounded-md px-3 py-2 text-sm ${mode === "sessions" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}>Sessões</button><button onClick={() => setMode("notes")} className={`rounded-md px-3 py-2 text-sm ${mode === "notes" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}>Notas</button></div><button onClick={() => void (mode === "sessions" ? createSession() : createNote())} className="secondary-button mt-3 w-full"><Plus className="h-3.5 w-3.5" />{mode === "sessions" ? "Preparar sessão" : "Nova nota"}</button><div className="mt-4 space-y-2">{mode === "sessions" ? data.sessions.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("session", item.id, item.title); }} className={`w-full rounded-lg border p-3 text-left ${selectedSession?.id === item.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}><p className="font-medium text-zinc-200">{item.title}</p><p className="mt-1 text-xs text-zinc-500">{item.status ?? "planned"} • {item.summary}</p></button>) : data.notes.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("note", item.id, item.title); }} className={`w-full rounded-lg border p-3 text-left ${selectedNote?.id === item.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}><div className="flex items-center justify-between"><p className="font-medium text-zinc-200">{item.title}</p>{item.favorite && <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />}</div><p className="mt-1 text-xs text-zinc-500">{item.isPrivate ? "Privada" : "Compartilhável"}</p></button>)}</div></aside><section className="overflow-y-auto p-6">{mode === "sessions" && selectedSession ? <SessionEditor key={selectedSession.id} item={selectedSession} data={data} action={action} /> : null}{mode === "notes" && selectedNote ? <NoteEditor key={selectedNote.id} item={selectedNote} data={data} action={action} /> : null}{mode === "sessions" && !selectedSession ? <Empty /> : null}{mode === "notes" && !selectedNote ? <Empty /> : null}</section></div>;
 }
 
 function SessionEditor({ item, data, action }: { item: SessionPlan; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
-  const [draft, setDraft] = useState(item);
-  const [scenes, setScenes] = useState(item.scenes.join("\n"));
-  const [notes, setNotes] = useState(item.notes.join("\n"));
-  const allRefs = useMemo<ContentRef[]>(() => [
-    ...data.rules.map((entry) => ({ type: "rule" as const, id: entry.id, label: `Regra: ${entry.title}` })),
-    ...data.players.map((entry) => ({ type: "player" as const, id: entry.id, label: `Player: ${entry.characterName}` })),
-    ...data.npcs.map((entry) => ({ type: "npc" as const, id: entry.id, label: `NPC: ${entry.name}` })),
-    ...(data.entities ?? []).map((entry) => ({ type: "entity" as const, id: entry.id, label: `${entry.type}: ${entry.name}` })),
-  ], [data]);
+  const [draft, setDraft] = useState(item); const [scenes, setScenes] = useState(item.scenes.join("\n")); const [notes, setNotes] = useState(item.notes.join("\n"));
+  const allRefs = useMemo<ContentRef[]>(() => [...data.rules.map((entry) => ({ type: "rule" as const, id: entry.id, label: `Regra: ${entry.title}` })), ...data.players.map((entry) => ({ type: "player" as const, id: entry.id, label: `Player: ${entry.characterName}` })), ...data.npcs.map((entry) => ({ type: "npc" as const, id: entry.id, label: `NPC: ${entry.name}` })), ...(data.entities ?? []).map((entry) => ({ type: "entity" as const, id: entry.id, label: `${entry.type}: ${entry.name}` })), ...(data.handouts ?? []).map((entry) => ({ type: "handout" as const, id: entry.id, label: `Handout: ${entry.title}` }))], [data]);
   const linked = draft.linkedItems ?? [];
-  const payload = useMemo<SessionPlan>(() => ({
-    ...draft,
-    scenes: scenes.split("\n").map((line) => line.trim()).filter(Boolean),
-    notes: notes.split("\n").map((line) => line.trim()).filter(Boolean),
-    linkedRefs: linked.map((ref) => ref.label ?? ref.id),
-  }), [draft, linked, notes, scenes]);
-
-  async function save(next: SessionPlan) {
-    await action({ action: "upsert-session", tableId: data.activeTableId, item: next });
-  }
-
+  const payload = useMemo<SessionPlan>(() => ({ ...draft, scenes: scenes.split("\n").map((line) => line.trim()).filter(Boolean), notes: notes.split("\n").map((line) => line.trim()).filter(Boolean), linkedRefs: linked.map((ref) => ref.label ?? ref.id) }), [draft, linked, notes, scenes]);
+  async function save(next: SessionPlan) { await action({ action: "upsert-session", tableId: data.activeTableId, item: next }); }
   const autosave = useDebouncedAutosave(payload, save, 1100);
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Preparação de sessão</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (confirm(`Excluir ${draft.title}?`)) await action({ action: "delete-session", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
-      <div className="grid gap-3 md:grid-cols-3"><Field label="Título" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} /><Field label="Número" value={String(draft.sessionNumber ?? "")} onChange={(value) => setDraft({ ...draft, sessionNumber: Number(value) || undefined })} /><label className="form-label">Status<select className="field mt-2" value={draft.status ?? "planned"} onChange={(event) => setDraft({ ...draft, status: event.target.value as SessionPlan["status"] })}><option value="planned">Planejada</option><option value="running">Em andamento</option><option value="completed">Concluída</option></select></label></div>
-      <Field label="Data / horário" value={draft.scheduledFor ?? ""} onChange={(value) => setDraft({ ...draft, scheduledFor: value })} />
-      <label className="form-label block">Resumo<textarea className="field mt-2" rows={3} value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
-      <label className="form-label block">Cenas — uma por linha<textarea className="field mt-2" rows={8} value={scenes} onChange={(event) => setScenes(event.target.value)} /></label>
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-        <div className="flex items-center gap-2"><Link2 className="h-4 w-4 text-amber-400" /><p className="font-semibold text-zinc-100">Conteúdo ligado</p></div>
-        <select className="field mt-3" value="" onChange={(event) => { const ref = allRefs.find((entry) => `${entry.type}:${entry.id}` === event.target.value); if (ref && !linked.some((entry) => entry.type === ref.type && entry.id === ref.id)) setDraft({ ...draft, linkedItems: [...linked, ref] }); }}>
-          <option value="">Adicionar regra, ficha ou item...</option>
-          {allRefs.map((ref) => <option key={`${ref.type}:${ref.id}`} value={`${ref.type}:${ref.id}`}>{ref.label}</option>)}
-        </select>
-        <div className="mt-3 flex flex-wrap gap-2">{linked.map((ref) => <button key={`${ref.type}:${ref.id}`} onClick={() => setDraft({ ...draft, linkedItems: linked.filter((entry) => !(entry.type === ref.type && entry.id === ref.id)) })} className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-red-500/50">{ref.label ?? ref.id} ×</button>)}</div>
-      </div>
-
-      <label className="form-label block">Notas e ganchos — uma por linha<textarea className="field mt-2" rows={7} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-      <SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} />
-    </div>
-  );
+  return <div className="item-editor-scope mx-auto max-w-4xl space-y-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Preparação de sessão</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (prompt(`Para excluir “${draft.title}”, digite o título exatamente:`) === draft.title) await action({ action: "delete-session", tableId: data.activeTableId, id: draft.id, name: draft.title }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div><div className="grid gap-3 md:grid-cols-3"><Field label="Título" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} /><Field label="Número" value={String(draft.sessionNumber ?? "")} onChange={(value) => setDraft({ ...draft, sessionNumber: Number(value) || undefined })} /><label className="form-label">Status<select className="field mt-2" value={draft.status ?? "planned"} onChange={(event) => setDraft({ ...draft, status: event.target.value as SessionPlan["status"] })}><option value="planned">Planejada</option><option value="running">Em andamento</option><option value="completed">Concluída</option></select></label></div><Field label="Data / horário" value={draft.scheduledFor ?? ""} onChange={(value) => setDraft({ ...draft, scheduledFor: value })} /><label className="form-label block">Resumo<textarea className="field mt-2" rows={3} value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label><label className="form-label block">Cenas — uma por linha<textarea className="field mt-2" rows={8} value={scenes} onChange={(event) => setScenes(event.target.value)} /></label>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"><div className="flex items-center gap-2"><Link2 className="h-4 w-4 text-amber-400" /><p className="font-semibold text-zinc-100">Conteúdo ligado</p></div><select className="field mt-3" value="" onChange={(event) => { const ref = allRefs.find((entry) => `${entry.type}:${entry.id}` === event.target.value); if (ref && !linked.some((entry) => entry.type === ref.type && entry.id === ref.id)) setDraft({ ...draft, linkedItems: [...linked, ref] }); }}><option value="">Adicionar regra, ficha, mundo ou handout...</option>{allRefs.map((ref) => <option key={`${ref.type}:${ref.id}`} value={`${ref.type}:${ref.id}`}>{ref.label}</option>)}</select><div className="mt-3 flex flex-wrap gap-2">{linked.map((ref) => <button key={`${ref.type}:${ref.id}`} onClick={() => setDraft({ ...draft, linkedItems: linked.filter((entry) => !(entry.type === ref.type && entry.id === ref.id)) })} className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-red-500/50">{ref.label ?? ref.id} ×</button>)}</div></div>
+    <label className="form-label block">Notas e ganchos — uma por linha<textarea className="field mt-2" rows={7} value={notes} onChange={(event) => setNotes(event.target.value)} /></label><SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} />
+  </div>;
 }
 
 function NoteEditor({ item, data, action }: { item: TableNote; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
-  const [draft, setDraft] = useState(item);
-  const [tags, setTags] = useState(item.tags?.join(", ") ?? "");
-  const payload = useMemo<TableNote>(() => ({
-    ...draft,
-    tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-    isPrivate: draft.visibility !== "players",
-  }), [draft, tags]);
-
-  async function save(next: TableNote) {
-    await action({ action: "upsert-note", tableId: data.activeTableId, item: next });
-  }
-
+  const [draft, setDraft] = useState(item); const [tags, setTags] = useState(item.tags?.join(", ") ?? "");
+  const payload = useMemo<TableNote>(() => ({ ...draft, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), isPrivate: draft.visibility !== "players" }), [draft, tags]);
+  async function save(next: TableNote) { await action({ action: "upsert-note", tableId: data.activeTableId, item: next }); }
   const autosave = useDebouncedAutosave(payload, save, 1100);
-
-  return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-amber-400"><NotebookPen className="h-4 w-4" />Anotação da mesa</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, favorite: !draft.favorite })} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players", isPrivate: draft.visibility === "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (confirm(`Excluir ${draft.title}?`)) await action({ action: "delete-note", tableId: data.activeTableId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>
-      <Field label="Título" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} />
-      <Field label="Tags" value={tags} onChange={setTags} />
-      <label className="form-label block">Conteúdo<textarea className="field mt-2 min-h-[420px]" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
-      <SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} />
-    </div>
-  );
+  return <div className="item-editor-scope mx-auto max-w-4xl space-y-5"><div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-amber-400"><NotebookPen className="h-4 w-4" />Anotação da mesa</p><h2 className="mt-1 text-2xl font-bold">{draft.title}</h2></div><div className="flex gap-2"><button onClick={() => setDraft({ ...draft, favorite: !draft.favorite })} className="icon-button"><Star className={`h-4 w-4 ${draft.favorite ? "fill-amber-300 text-amber-300" : ""}`} /></button><button onClick={() => setDraft({ ...draft, visibility: draft.visibility === "players" ? "master" : "players", isPrivate: draft.visibility === "players" })} className="icon-button">{draft.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={async () => { if (prompt(`Para excluir “${draft.title}”, digite o título exatamente:`) === draft.title) await action({ action: "delete-note", tableId: data.activeTableId, id: draft.id, name: draft.title }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button></div></div><Field label="Título" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} /><Field label="Tags" value={tags} onChange={setTags} /><label className="form-label block">Conteúdo<textarea className="field mt-2 min-h-[420px]" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label><SaveBar state={autosave} visibility={draft.visibility} onSave={() => void save(payload)} /></div>;
 }
 
-function SaveBar({ state, visibility, onSave }: { state: ReturnType<typeof useDebouncedAutosave>; visibility?: "master" | "players"; onSave: () => void }) {
-  const text = state === "dirty" ? "● Alterações não salvas" : state === "saving" ? "Salvando..." : state === "error" ? "Erro no autosave" : "✓ Salvo automaticamente";
-  return <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{text} • {visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={onSave} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div>;
-}
-
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="form-label">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="field mt-2" /></label>;
-}
-
-function Empty() {
-  return <div className="flex h-full items-center justify-center text-sm text-zinc-500">Crie uma nota ou prepare uma sessão.</div>;
-}
+function SaveBar({ state, visibility, onSave }: { state: ReturnType<typeof useDebouncedAutosave>; visibility?: "master" | "players"; onSave: () => void }) { const text = state === "dirty" ? "● Alterações não salvas" : state === "saving" ? "Salvando..." : state === "error" ? "Erro no autosave" : "✓ Salvo automaticamente"; return <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500"><span>{text} • {visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={onSave} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div>; }
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="form-label">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="field mt-2" /></label>; }
+function Empty() { return <div className="flex h-full items-center justify-center text-sm text-zinc-500">Crie uma nota ou prepare uma sessão.</div>; }
