@@ -77,6 +77,7 @@ button:disabled {
   border-color: rgb(251 191 36);
 }
 
+.top-action-button:disabled,
 .primary-button:disabled,
 .secondary-button:disabled,
 .icon-button:disabled,
@@ -142,6 +143,40 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgb(113 113 122);
+}
+
+.workspace-readonly input:not([placeholder*="Filtrar" i]),
+.workspace-readonly textarea,
+.workspace-readonly select {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  caret-color: transparent;
+  cursor: text;
+}
+
+.workspace-readonly select,
+.workspace-readonly input[type="number"],
+.workspace-readonly input[type="checkbox"],
+.workspace-readonly input[type="radio"] {
+  pointer-events: none;
+}
+
+.workspace-readonly .primary-button,
+.workspace-readonly .secondary-button,
+.workspace-readonly .icon-button,
+.workspace-readonly .mini-combat {
+  pointer-events: none;
+  opacity: 0.28;
+  filter: saturate(0.45);
+}
+
+.workspace-readonly .form-label {
+  color: rgb(82 82 91);
+}
+
+.workspace-editing .field {
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .compact-workspace .field {
