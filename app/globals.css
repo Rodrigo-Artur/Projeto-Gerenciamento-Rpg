@@ -26,13 +26,8 @@ select {
   font: inherit;
 }
 
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
 
 .top-action-button,
 .secondary-button,
@@ -58,10 +53,7 @@ button:disabled {
 }
 
 .top-action-button:hover,
-.secondary-button:hover {
-  border-color: rgb(245 158 11 / 0.65);
-  color: rgb(252 211 77);
-}
+.secondary-button:hover { border-color: rgb(245 158 11 / 0.65); color: rgb(252 211 77); }
 
 .primary-button {
   border: 1px solid rgb(245 158 11);
@@ -72,18 +64,13 @@ button:disabled {
   color: rgb(24 24 27);
 }
 
-.primary-button:hover {
-  background: rgb(251 191 36);
-  border-color: rgb(251 191 36);
-}
+.primary-button:hover { background: rgb(251 191 36); border-color: rgb(251 191 36); }
 
 .top-action-button:disabled,
 .primary-button:disabled,
 .secondary-button:disabled,
 .icon-button:disabled,
-.mini-combat:disabled {
-  opacity: 0.4;
-}
+.mini-combat:disabled { opacity: 0.4; }
 
 .icon-button {
   min-width: 2.25rem;
@@ -94,10 +81,7 @@ button:disabled {
   color: rgb(161 161 170);
 }
 
-.icon-button:hover {
-  border-color: rgb(245 158 11 / 0.6);
-  color: rgb(252 211 77);
-}
+.icon-button:hover { border-color: rgb(245 158 11 / 0.6); color: rgb(252 211 77); }
 
 .mini-combat {
   border: 1px solid rgb(63 63 70);
@@ -107,10 +91,7 @@ button:disabled {
   color: rgb(212 212 216);
 }
 
-.mini-combat:hover {
-  border-color: rgb(245 158 11 / 0.6);
-  color: rgb(252 211 77);
-}
+.mini-combat:hover { border-color: rgb(245 158 11 / 0.6); color: rgb(252 211 77); }
 
 .field {
   width: 100%;
@@ -126,14 +107,8 @@ button:disabled {
   resize: vertical;
 }
 
-.field::placeholder {
-  color: rgb(82 82 91);
-}
-
-.field:focus {
-  border-color: rgb(245 158 11 / 0.8);
-  box-shadow: 0 0 0 2px rgb(245 158 11 / 0.08);
-}
+.field::placeholder { color: rgb(82 82 91); }
+.field:focus { border-color: rgb(245 158 11 / 0.8); box-shadow: 0 0 0 2px rgb(245 158 11 / 0.08); }
 
 .form-label {
   display: block;
@@ -145,7 +120,7 @@ button:disabled {
   color: rgb(113 113 122);
 }
 
-.workspace-readonly input:not([placeholder*="Filtrar" i]),
+.workspace-readonly input:not([placeholder*="Filtrar" i]):not([placeholder*="Buscar" i]):not([placeholder*="Pesquisar" i]),
 .workspace-readonly textarea,
 .workspace-readonly select {
   border-color: transparent;
@@ -158,9 +133,7 @@ button:disabled {
 .workspace-readonly select,
 .workspace-readonly input[type="number"],
 .workspace-readonly input[type="checkbox"],
-.workspace-readonly input[type="radio"] {
-  pointer-events: none;
-}
+.workspace-readonly input[type="radio"] { pointer-events: none; }
 
 .workspace-readonly .primary-button,
 .workspace-readonly .secondary-button,
@@ -171,40 +144,43 @@ button:disabled {
   filter: saturate(0.45);
 }
 
-.workspace-readonly .form-label {
-  color: rgb(82 82 91);
+.workspace-readonly .form-label { color: rgb(82 82 91); }
+
+/* No modo "Editar item", apenas o editor marcado volta a se comportar como formulário. */
+.workspace-readonly.workspace-item-edit .item-editor-scope input,
+.workspace-readonly.workspace-item-edit .item-editor-scope textarea,
+.workspace-readonly.workspace-item-edit .item-editor-scope select {
+  border-color: rgb(63 63 70);
+  background: rgb(9 9 11);
+  box-shadow: none;
+  caret-color: auto;
+  pointer-events: auto;
+  cursor: text;
 }
 
-.workspace-editing .field {
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+.workspace-readonly.workspace-item-edit .item-editor-scope input[type="checkbox"],
+.workspace-readonly.workspace-item-edit .item-editor-scope input[type="radio"],
+.workspace-readonly.workspace-item-edit .item-editor-scope select { cursor: pointer; }
+
+.workspace-readonly.workspace-item-edit .item-editor-scope .primary-button,
+.workspace-readonly.workspace-item-edit .item-editor-scope .secondary-button,
+.workspace-readonly.workspace-item-edit .item-editor-scope .icon-button,
+.workspace-readonly.workspace-item-edit .item-editor-scope .mini-combat {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
 }
 
-.compact-workspace .field {
-  padding: 0.42rem 0.55rem;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
+.workspace-readonly.workspace-item-edit .item-editor-scope .form-label { color: rgb(113 113 122); }
+.workspace-editing .field { transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
 
+.compact-workspace .field { padding: 0.42rem 0.55rem; font-size: 0.75rem; line-height: 1rem; }
 .compact-workspace .primary-button,
 .compact-workspace .secondary-button,
-.compact-workspace .top-action-button {
-  padding: 0.35rem 0.55rem;
-  font-size: 0.7rem;
-}
-
-.compact-workspace .icon-button {
-  min-width: 1.9rem;
-  min-height: 1.9rem;
-  padding: 0.3rem;
-}
-
+.compact-workspace .top-action-button { padding: 0.35rem 0.55rem; font-size: 0.7rem; }
+.compact-workspace .icon-button { min-width: 1.9rem; min-height: 1.9rem; padding: 0.3rem; }
 .compact-workspace article,
 .compact-workspace section,
-.compact-workspace aside {
-  --compact-scale: 0.94;
-}
+.compact-workspace aside { --compact-scale: 0.94; }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(63 63 70) rgb(9 9 11);
-}
+* { scrollbar-width: thin; scrollbar-color: rgb(63 63 70) rgb(9 9 11); }
