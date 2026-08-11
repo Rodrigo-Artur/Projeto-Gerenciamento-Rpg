@@ -32,6 +32,8 @@ export type ContentMeta = {
   archived?: boolean;
   templateId?: string;
   customFields?: Record<string, unknown>;
+  imageUrl?: string;
+  imageAlt?: string;
   createdAt?: string;
   updatedAt?: string;
   lastOpenedAt?: string;
@@ -59,7 +61,7 @@ export type RpgTable = {
 };
 
 export type ContentRef = {
-  type: "rule" | "npc" | "player" | "note" | "session" | "entity";
+  type: "rule" | "npc" | "player" | "note" | "session" | "entity" | "handout" | "library";
   id: string;
   label?: string;
 };
@@ -131,6 +133,10 @@ export type StructuredAbility = {
   currentCooldown?: number;
   uses?: number;
   maxUses?: number;
+  resourceName?: string;
+  resourceCost?: number;
+  rollExpression?: string;
+  trigger?: "manual" | "hp-half" | "hp-quarter" | "round-start" | "round-end";
 };
 
 export type NpcSheet = {
@@ -202,7 +208,7 @@ export type SheetTemplate = {
   defaultCategory?: SheetCategory;
 };
 
-export type WorldEntityType = "item" | "location" | "faction" | "quest" | "timeline";
+export type WorldEntityType = "item" | "location" | "faction" | "quest" | "timeline" | "calendar-event";
 
 export type WorldEntity = {
   id: string;
@@ -218,6 +224,14 @@ export type WorldEntity = {
   data?: Record<string, unknown>;
 };
 
+export type TimedCondition = {
+  id: string;
+  name: string;
+  remainingRounds?: number;
+  tick?: "start" | "end";
+  effect?: string;
+};
+
 export type CombatParticipant = {
   id: string;
   sourceType: "player" | "npc" | "custom";
@@ -229,9 +243,12 @@ export type CombatParticipant = {
   tempHp?: number;
   armorClass?: number;
   conditions: string[];
+  timedConditions?: TimedCondition[];
   resources: LabeledValue[];
   abilities: StructuredAbility[];
   hidden?: boolean;
+  phase?: string;
+  imageUrl?: string;
 };
 
 export type CombatState = {
@@ -251,6 +268,116 @@ export type BackupSummary = {
   tableId: string;
   reason: string;
   createdAt: string;
+};
+
+export type LibraryItemType = "rule" | "npc" | "player" | "entity" | "template" | "encounter" | "custom";
+
+export type LibraryItem = {
+  id: string;
+  systemId?: string;
+  type: LibraryItemType;
+  name: string;
+  description: string;
+  tags: string[];
+  imageUrl?: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContentPack = {
+  id: string;
+  name: string;
+  description: string;
+  libraryItemIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CampaignRelation = {
+  id: string;
+  tableId: string;
+  sourceType: "npc" | "player" | "entity";
+  sourceId: string;
+  sourceName: string;
+  targetType: "npc" | "player" | "entity";
+  targetId: string;
+  targetName: string;
+  relation: string;
+  note?: string;
+};
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  day: number;
+  month: number;
+  year: number;
+  description?: string;
+  visibility?: Visibility;
+};
+
+export type WorldCalendar = {
+  day: number;
+  month: number;
+  year: number;
+  monthName?: string;
+  calendarName?: string;
+  events: CalendarEvent[];
+};
+
+export type SessionLogEntry = {
+  id: string;
+  tableId: string;
+  sessionId?: string;
+  kind: "system" | "combat" | "note" | "content" | "manual" | "snapshot";
+  message: string;
+  createdAt: string;
+};
+
+export type SessionSnapshot = {
+  id: string;
+  tableId: string;
+  sessionId?: string;
+  label: string;
+  createdAt: string;
+  summary?: string;
+};
+
+export type SnapshotComparison = {
+  fromId: string;
+  toId: string;
+  added: string[];
+  removed: string[];
+  changed: string[];
+  summary: string;
+};
+
+export type Handout = {
+  id: string;
+  tableId: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  visibility: Visibility;
+  revealedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceRuntime = {
+  activeSessionId?: string;
+  quickNotes: string[];
+  calendar: WorldCalendar;
+};
+
+export type WorkspaceTab = {
+  id: string;
+  type: string;
+  refId?: string;
+  title: string;
+  view: string;
+  pinned?: boolean;
 };
 
 export type ImportConflict = {
@@ -298,42 +425,19 @@ export type RulebookData = RulebookContent & {
   combats?: CombatState[];
   backups?: BackupSummary[];
   systemConfig?: RpgSystemConfig;
+  library?: LibraryItem[];
+  packs?: ContentPack[];
+  relations?: CampaignRelation[];
+  runtime?: WorkspaceRuntime;
+  sessionLog?: SessionLogEntry[];
+  sessionSnapshots?: SessionSnapshot[];
+  handouts?: Handout[];
 };
 
 export type OpenPanel =
-  | {
-      id: string;
-      type: "rule";
-      refId: string;
-      title: string;
-    }
-  | {
-      id: string;
-      type: "npc";
-      refId: string;
-      title: string;
-    }
-  | {
-      id: string;
-      type: "player";
-      refId: string;
-      title: string;
-    }
-  | {
-      id: string;
-      type: "note";
-      refId: string;
-      title: string;
-    }
-  | {
-      id: string;
-      type: "session";
-      refId: string;
-      title: string;
-    }
-  | {
-      id: string;
-      type: "entity";
-      refId: string;
-      title: string;
-    };
+  | { id: string; type: "rule"; refId: string; title: string }
+  | { id: string; type: "npc"; refId: string; title: string }
+  | { id: string; type: "player"; refId: string; title: string }
+  | { id: string; type: "note"; refId: string; title: string }
+  | { id: string; type: "session"; refId: string; title: string }
+  | { id: string; type: "entity"; refId: string; title: string };
