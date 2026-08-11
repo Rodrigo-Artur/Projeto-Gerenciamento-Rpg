@@ -4,59 +4,25 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { ImportPreview, RulebookData } from "@/types/rulebook";
 
-export type RecentContent = {
-  type: string;
-  id: string;
-  name: string;
-  openedAt: string;
-};
-
-export type SearchResult = {
-  type: string;
-  id: string;
-  name: string;
-  description: string;
-};
-
-type WorkspaceResponse = RulebookData & {
-  recent?: RecentContent[];
-  error?: string;
-};
+export type RecentContent = { type: string; id: string; name: string; openedAt: string };
+export type SearchResult = { type: string; id: string; name: string; description: string };
+type WorkspaceResponse = RulebookData & { recent?: RecentContent[]; error?: string; summary?: string; undo?: boolean; undoLabel?: string };
 
 const emptyData: RulebookData = {
-  systems: [],
-  tables: [],
-  activeTableId: "mesa-principal",
-  activeSystemId: "kaiju-rpg",
-  rules: [],
-  npcs: [],
-  players: [],
-  notes: [],
-  sessions: [],
-  history: [],
-  templates: [],
-  entities: [],
-  combats: [],
-  backups: [],
+  systems: [], tables: [], activeTableId: "mesa-principal", activeSystemId: "kaiju-rpg",
+  rules: [], npcs: [], players: [], notes: [], sessions: [], history: [], templates: [], entities: [], combats: [], backups: [],
+  library: [], packs: [], relations: [], sessionLog: [], sessionSnapshots: [], handouts: [],
+  runtime: { activeSessionId: undefined, quickNotes: [], calendar: { day: 1, month: 1, year: 1, calendarName: "Calendário da campanha", events: [] } },
 };
 
 function normalize(data: Partial<RulebookData>): RulebookData {
   return {
-    systems: data.systems ?? [],
-    tables: data.tables ?? [],
-    activeTableId: data.activeTableId ?? "mesa-principal",
-    activeSystemId: data.activeSystemId ?? "kaiju-rpg",
-    rules: data.rules ?? [],
-    npcs: data.npcs ?? [],
-    players: data.players ?? [],
-    notes: data.notes ?? [],
-    sessions: data.sessions ?? [],
-    history: data.history ?? [],
-    templates: data.templates ?? [],
-    entities: data.entities ?? [],
-    combats: data.combats ?? [],
-    backups: data.backups ?? [],
-    systemConfig: data.systemConfig,
+    systems: data.systems ?? [], tables: data.tables ?? [],
+    activeTableId: data.activeTableId ?? "mesa-principal", activeSystemId: data.activeSystemId ?? "kaiju-rpg",
+    rules: data.rules ?? [], npcs: data.npcs ?? [], players: data.players ?? [], notes: data.notes ?? [], sessions: data.sessions ?? [], history: data.history ?? [],
+    templates: data.templates ?? [], entities: data.entities ?? [], combats: data.combats ?? [], backups: data.backups ?? [], systemConfig: data.systemConfig,
+    library: data.library ?? [], packs: data.packs ?? [], relations: data.relations ?? [], sessionLog: data.sessionLog ?? [], sessionSnapshots: data.sessionSnapshots ?? [], handouts: data.handouts ?? [],
+    runtime: data.runtime ?? emptyData.runtime,
   };
 }
 
@@ -72,8 +38,7 @@ export function useWorkspaceApi(playerView = false) {
   }, []);
 
   const load = useCallback(async (tableId?: string) => {
-    setLoading(true);
-    setStatus("Carregando mesa...");
+    setLoading(true); setStatus("Carregando mesa...");
     try {
       const params = new URLSearchParams();
       if (tableId) params.set("tableId", tableId);
@@ -81,33 +46,19 @@ export function useWorkspaceApi(playerView = false) {
       const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store" });
       const json = await response.json() as WorkspaceResponse;
       if (!response.ok) throw new Error(json.error || "Falha ao carregar.");
-      applyResponse(json);
-      setStatus("Salvo");
+      applyResponse(json); setStatus("Salvo");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Erro ao carregar");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [applyResponse, playerView]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    void load(params.get("tableId") ?? undefined);
-  }, [load]);
+  useEffect(() => { const params = new URLSearchParams(window.location.search); void load(params.get("tableId") ?? undefined); }, [load]);
 
   const action = useCallback(async <T extends Record<string, unknown>>(payload: T, options?: { reloadTableId?: string; silent?: boolean }) => {
     if (!options?.silent) setStatus("Salvando...");
-    const response = await fetch("/api/rulebook", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const response = await fetch("/api/rulebook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const json = await response.json() as WorkspaceResponse;
-    if (!response.ok) {
-      const message = json.error || "Falha ao salvar.";
-      setStatus(message);
-      throw new Error(message);
-    }
+    if (!response.ok) { const message = json.error || "Falha ao salvar."; setStatus(message); throw new Error(message); }
     if (json.tables) applyResponse(json);
     if (options?.reloadTableId) await load(options.reloadTableId);
     if (!options?.silent) setStatus("Salvo");
@@ -125,11 +76,7 @@ export function useWorkspaceApi(playerView = false) {
   }, [data.activeTableId, playerView]);
 
   const previewImport = useCallback(async (payload: unknown, tableId = data.activeTableId) => {
-    const response = await fetch("/api/rulebook", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "import-preview", tableId, payload }),
-    });
+    const response = await fetch("/api/rulebook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import-preview", tableId, payload }) });
     const json = await response.json() as ImportPreview & { error?: string };
     if (!response.ok) throw new Error(json.error || "Falha ao analisar arquivo.");
     return json;
@@ -139,16 +86,5 @@ export function useWorkspaceApi(playerView = false) {
     await action({ action: "record-recent", tableId: data.activeTableId, contentType: type, contentId: id, contentName: name }, { silent: true });
   }, [action, data.activeTableId]);
 
-  return {
-    data,
-    recent,
-    status,
-    loading,
-    setData,
-    load,
-    action,
-    search,
-    previewImport,
-    recordRecent,
-  };
+  return { data, recent, status, loading, setData, load, action, search, previewImport, recordRecent };
 }
