@@ -43,7 +43,7 @@ The application combines campaign documentation, character sheets, combat automa
 ### Getting started
 
 ```bash
-git clone YOUR_REPOSITORY_URL
+git clone https://github.com/Rodrigo-Artur/Projeto-Gerenciamento-Rpg.git
 cd mesa-do-mestre
 npm install
 npm run dev
@@ -100,7 +100,7 @@ A aplicação reúne documentação da campanha, fichas, automação de combate 
 ### Como executar
 
 ```bash
-git clone URL_DO_SEU_REPOSITORIO
+git clone https://github.com/Rodrigo-Artur/Projeto-Gerenciamento-Rpg.git
 cd mesa-do-mestre
 npm install
 npm run dev
