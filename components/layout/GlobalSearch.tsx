@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderCircle, Search, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { SearchResult } from "@/hooks/useWorkspaceApi";
 
@@ -41,7 +41,7 @@ export function GlobalSearch({
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [onOpenChange, open]);
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
       onOpenChange(false);
