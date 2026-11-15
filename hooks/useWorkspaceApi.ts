@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ImportPreview, RulebookData } from "@/types/rulebook";
 
@@ -31,14 +31,19 @@ export function useWorkspaceApi(playerView = false) {
   const [recent, setRecent] = useState<RecentContent[]>([]);
   const [status, setStatus] = useState("Carregando...");
   const [loading, setLoading] = useState(true);
+  const loadGeneration = useRef(0);
 
-  const applyResponse = useCallback((response: WorkspaceResponse) => {
+  const applyResponse = useCallback((response: WorkspaceResponse, clearRecents = false) => {
     setData(normalize(response));
-    setRecent(response.recent ?? []);
+    if (response.recent !== undefined) setRecent(response.recent);
+    else if (clearRecents) setRecent([]);
   }, []);
 
   const load = useCallback(async (tableId?: string) => {
-    setLoading(true); setStatus("Carregando mesa...");
+    // Uma resposta atrasada não pode trocar a mesa que o usuário já selecionou.
+    const generation = ++loadGeneration.current;
+    setLoading(true);
+    setStatus("Carregando mesa...");
     try {
       const params = new URLSearchParams();
       if (tableId) params.set("tableId", tableId);
@@ -46,31 +51,52 @@ export function useWorkspaceApi(playerView = false) {
       const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store" });
       const json = await response.json() as WorkspaceResponse;
       if (!response.ok) throw new Error(json.error || "Falha ao carregar.");
-      applyResponse(json); setStatus("Salvo");
+      if (generation !== loadGeneration.current) return;
+      applyResponse(json, true);
+      setStatus("Salvo");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Erro ao carregar");
-    } finally { setLoading(false); }
+      if (generation === loadGeneration.current) {
+        setStatus(error instanceof Error ? error.message : "Erro ao carregar");
+      }
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
+    }
   }, [applyResponse, playerView]);
 
-  useEffect(() => { const params = new URLSearchParams(window.location.search); void load(params.get("tableId") ?? undefined); }, [load]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    void load(params.get("tableId") ?? undefined);
+  }, [load]);
 
   const action = useCallback(async <T extends Record<string, unknown>>(payload: T, options?: { reloadTableId?: string; silent?: boolean }) => {
+    const generation = loadGeneration.current;
     if (!options?.silent) setStatus("Salvando...");
-    const response = await fetch("/api/rulebook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const json = await response.json() as WorkspaceResponse;
-    if (!response.ok) { const message = json.error || "Falha ao salvar."; setStatus(message); throw new Error(message); }
-    if (json.tables) applyResponse(json);
-    if (options?.reloadTableId) await load(options.reloadTableId);
-    if (!options?.silent) setStatus("Salvo");
-    return json;
+    try {
+      const response = await fetch("/api/rulebook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await response.json() as WorkspaceResponse;
+      if (!response.ok) throw new Error(json.error || "Falha ao salvar.");
+      if (json.tables && generation === loadGeneration.current) applyResponse(json);
+      if (options?.reloadTableId) await load(options.reloadTableId);
+      if (!options?.silent && generation === loadGeneration.current) setStatus("Salvo");
+      return json;
+    } catch (error) {
+      if (!options?.silent && generation === loadGeneration.current) {
+        setStatus(error instanceof Error ? error.message : "Erro ao salvar.");
+      }
+      throw error;
+    }
   }, [applyResponse, load]);
 
-  const search = useCallback(async (query: string, tableId = data.activeTableId) => {
-    if (!query.trim()) return [] as SearchResult[];
-    const params = new URLSearchParams({ tableId, search: query });
+  const search = useCallback(async (query: string, tableId = data.activeTableId, signal?: AbortSignal): Promise<SearchResult[]> => {
+    if (!query.trim()) return [];
+    const params = new URLSearchParams({ tableId, search: query.trim() });
     if (playerView) params.set("view", "players");
-    const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return [] as SearchResult[];
+    const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store", signal });
+    if (!response.ok) throw new Error("Falha ao consultar a busca.");
     const json = await response.json() as { results?: SearchResult[] };
     return json.results ?? [];
   }, [data.activeTableId, playerView]);
