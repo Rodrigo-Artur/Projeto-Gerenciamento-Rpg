@@ -65,7 +65,7 @@ export function SheetsView({ data, action, onOpened }: { data: RulebookData; act
   const playerTemplates = (data.templates ?? []).filter((item) => item.kind === "player" || item.kind === "companion" || item.kind === "custom");
   const npcTemplates = (data.templates ?? []).filter((item) => item.kind !== "player");
 
-  return <div className="grid h-full grid-cols-[330px_1fr] overflow-hidden">
+  return <div className="workspace-list-detail workspace-list-detail--330 grid h-full min-h-0 overflow-hidden">
     <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/60 p-4">
       <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-1"><button onClick={() => setKind("players")} className={`rounded-md px-3 py-2 text-sm ${kind === "players" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}><UserRound className="mr-2 inline h-4 w-4" />Players</button><button onClick={() => setKind("npcs")} className={`rounded-md px-3 py-2 text-sm ${kind === "npcs" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}><Users className="mr-2 inline h-4 w-4" />NPCs</button></div>
       <input value={query} onChange={(event) => setQuery(event.target.value)} className="field mt-3" placeholder="Filtrar fichas" />
