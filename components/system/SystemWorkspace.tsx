@@ -1,32 +1,6 @@
 "use client";
 
-import {
-  BookOpen,
-  CalendarDays,
-  Clock3,
-  Database,
-  Download,
-  ExternalLink,
-  Eye,
-  History,
-  Home,
-  LayoutDashboard,
-  Library,
-  Link2,
-  Lock,
-  Map,
-  Maximize2,
-  Minimize2,
-  Pencil,
-  Rows3,
-  Search,
-  Settings2,
-  Swords,
-  Undo2,
-  Upload,
-  Users,
-  X,
-} from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import {
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
@@ -38,6 +12,10 @@ import {
   useState,
 } from "react";
 
+import { AppShell } from "@/components/layout/AppShell";
+import { AppSidebar, type ViewId } from "@/components/layout/AppSidebar";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Topbar } from "@/components/layout/Topbar";
 import { CampaignToolsView } from "@/components/system/CampaignToolsView";
 import { CombatView } from "@/components/system/CombatView";
 import { DashboardView } from "@/components/system/DashboardView";
@@ -53,23 +31,6 @@ import { TemplatesView } from "@/components/system/TemplatesView";
 import { WorldView } from "@/components/system/WorldView";
 import { useWorkspaceApi, type RecentContent, type SearchResult } from "@/hooks/useWorkspaceApi";
 import type { RulebookData, WorkspaceTab } from "@/types/rulebook";
-
-type ViewId = "home" | "session-mode" | "dashboard" | "rules" | "sheets" | "templates" | "world" | "campaign" | "sessions" | "combat" | "library" | "history";
-
-const navigation: Array<{ id: ViewId; label: string; icon: typeof Home }> = [
-  { id: "home", label: "Início", icon: Home },
-  { id: "session-mode", label: "Modo Sessão", icon: CalendarDays },
-  { id: "rules", label: "Sistema", icon: BookOpen },
-  { id: "sheets", label: "Fichas", icon: Users },
-  { id: "combat", label: "Combate", icon: Swords },
-  { id: "world", label: "Mundo", icon: Map },
-  { id: "campaign", label: "Campanha", icon: Link2 },
-  { id: "sessions", label: "Sessões", icon: CalendarDays },
-  { id: "library", label: "Biblioteca", icon: Library },
-  { id: "templates", label: "Templates", icon: Settings2 },
-  { id: "dashboard", label: "Gerenciar", icon: LayoutDashboard },
-  { id: "history", label: "Histórico", icon: History },
-];
 
 function protectedFieldFromTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return null;
@@ -109,6 +70,8 @@ export function SystemWorkspace() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [itemEditMode, setItemEditMode] = useState(false);
@@ -127,6 +90,7 @@ export function SystemWorkspace() {
 
   useEffect(() => {
     setCompact(window.localStorage.getItem("mesa-do-mestre-compact") === "1");
+    setSidebarCollapsed(window.localStorage.getItem("mesa-do-mestre-sidebar-collapsed") === "1");
     const savedTimeout = Number(window.localStorage.getItem("mesa-do-mestre-edit-timeout") ?? 5);
     setEditTimeoutMinutes([0, 1, 5, 15].includes(savedTimeout) ? savedTimeout : 5);
     const onFullscreen = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -340,28 +304,92 @@ export function SystemWorkspace() {
     setImportOpen(true);
   }
 
-  const contentHeight = "h-[calc(100vh-166px)]";
+  const contentHeight = "h-full";
   const focusId = activeEditableTab?.refId;
 
-  return <main onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} className={`flex min-h-screen flex-col bg-zinc-950 text-zinc-100 ${compact ? "compact-workspace" : ""}`}>
-    <header className={`relative z-40 border-b px-4 py-3 backdrop-blur ${editMode ? "border-amber-500/50 bg-amber-950/15" : itemEditMode ? "border-blue-500/50 bg-blue-950/15" : "border-emerald-500/20 bg-zinc-950/95"}`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => setView("home")} className="mr-2 text-left"><p className="text-lg font-bold text-amber-400">Mesa do Mestre</p><p className="text-[11px] text-zinc-600">{currentTable?.name ?? "Mesa"} • {currentSystem?.name ?? "Sistema"}</p></button>
-        <select value={data.activeTableId} onChange={(event) => void load(event.target.value)} className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 outline-none hover:border-amber-500/50">{data.tables.map((table) => <option key={table.id} value={table.id}>{table.name}</option>)}</select>
-        <div className="relative min-w-[220px] flex-1 max-w-xl"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-500" /><input ref={searchRef} value={searchQuery} onFocus={() => setSearchOpen(true)} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Buscar em regras, fichas e mundo...  Ctrl+K" className="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-sm text-zinc-200 outline-none focus:border-amber-500/60" />{searchOpen && searchQuery.trim() && <div className="absolute left-0 right-0 top-11 max-h-80 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950 p-2 shadow-2xl">{searchResults.length === 0 ? <p className="p-3 text-sm text-zinc-500">Nenhum resultado.</p> : searchResults.map((result) => <button key={`${result.type}-${result.id}`} onClick={() => openSearchResult(result)} className="block w-full rounded-lg p-3 text-left hover:bg-zinc-900"><p className="text-xs uppercase text-amber-400">{result.type}</p><p className="font-medium text-zinc-200">{result.name}</p><p className="line-clamp-1 text-xs text-zinc-500">{result.description}</p></button>)}</div>}</div>
-
-        <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1"><button onClick={() => { setEditMode(false); setItemEditMode(false); }} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${!effectiveEdit ? "bg-emerald-500/15 text-emerald-300" : "text-zinc-500"}`}><Lock className="h-3.5 w-3.5" />Leitura</button><button onClick={() => { setItemEditMode(false); setEditMode(true); setEditActivity(Date.now()); }} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${editMode ? "bg-amber-500 text-zinc-950" : "text-zinc-500"}`} title="Ctrl+Shift+E"><Pencil className="h-3.5 w-3.5" />Edição</button>{activeEditableTab && !editMode && <button onClick={() => { setItemEditMode((current) => !current); setEditActivity(Date.now()); }} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${itemEditMode ? "bg-blue-500 text-white" : "text-zinc-500"}`} title="Editar somente o item aberto"><Pencil className="h-3.5 w-3.5" />Item</button>}</div>
-
-        <label className="flex items-center gap-1 text-[10px] text-zinc-500"><Clock3 className="h-3.5 w-3.5" />bloquear<select value={editTimeoutMinutes} onChange={(event) => { const value = Number(event.target.value); setEditTimeoutMinutes(value); window.localStorage.setItem("mesa-do-mestre-edit-timeout", String(value)); setEditActivity(Date.now()); }} className="rounded border border-zinc-800 bg-zinc-900 px-1 py-1 text-xs"><option value={1}>1m</option><option value={5}>5m</option><option value={15}>15m</option><option value={0}>nunca</option></select></label>
-        <button onClick={() => void runAction({ action: "undo-last", tableId: data.activeTableId })} className="icon-button" title="Desfazer última mudança — Ctrl+Z"><Undo2 className="h-4 w-4" /></button>
-        <button disabled={!editMode} onClick={() => { setDropFile(undefined); setImportOpen(true); }} className="top-action-button" title={editMode ? "Importar ou arrastar JSON para a janela" : "Ative edição para importar"}><Upload className="h-4 w-4" />Importar</button>
-        <button onClick={() => void exportCurrent()} className="top-action-button"><Download className="h-4 w-4" />Exportar</button><button onClick={openPlayerView} className="top-action-button"><Eye className="h-4 w-4" />Tela jogador</button><button onClick={toggleCompact} className="icon-button"><Rows3 className="h-4 w-4" /></button><button onClick={() => void toggleFullscreen()} className="icon-button">{fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button><span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${status.toLowerCase().includes("erro") || status.toLowerCase().includes("falha") ? "border-red-500/40 text-red-300" : "border-emerald-500/30 text-emerald-300"}`}><Database className="h-3.5 w-3.5" />{loading ? "Carregando..." : status}</span>
+  return <AppShell
+    compact={compact}
+    onDragOver={(event) => event.preventDefault()}
+    onDrop={handleDrop}
+    sidebar={<AppSidebar
+      activeView={view}
+      onNavigate={(nextView) => { setView(nextView); setItemEditMode(false); setSearchOpen(false); }}
+      tableName={currentTable?.name ?? "Mesa"}
+      systemName={currentSystem?.name ?? "Sistema"}
+      sessionActive={Boolean(data.runtime?.activeSessionId)}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={() => setSidebarCollapsed((current) => {
+        const next = !current;
+        window.localStorage.setItem("mesa-do-mestre-sidebar-collapsed", next ? "1" : "0");
+        return next;
+      })}
+      mobileOpen={mobileMenuOpen}
+      onCloseMobile={() => setMobileMenuOpen(false)}
+    />}
+    topbar={<Topbar
+      tables={data.tables}
+      activeTableId={data.activeTableId}
+      activeSystemName={currentSystem?.name ?? "Sistema"}
+      sessionActive={Boolean(data.runtime?.activeSessionId)}
+      onTableChange={(tableId) => void load(tableId)}
+      onOpenSidebar={() => setMobileMenuOpen(true)}
+      searchRef={searchRef}
+      searchQuery={searchQuery}
+      searchResults={searchResults}
+      searchOpen={searchOpen}
+      onSearchChange={setSearchQuery}
+      onSearchOpen={setSearchOpen}
+      onSearchResult={openSearchResult}
+      editMode={editMode}
+      itemEditMode={itemEditMode}
+      canEditItem={Boolean(activeEditableTab)}
+      editTimeoutMinutes={editTimeoutMinutes}
+      onReadMode={() => { setEditMode(false); setItemEditMode(false); }}
+      onEditMode={() => { setItemEditMode(false); setEditMode(true); setEditActivity(Date.now()); }}
+      onItemEditMode={() => { setItemEditMode((current) => !current); setEditActivity(Date.now()); }}
+      onEditTimeoutChange={(minutes) => {
+        setEditTimeoutMinutes(minutes);
+        window.localStorage.setItem("mesa-do-mestre-edit-timeout", String(minutes));
+        setEditActivity(Date.now());
+      }}
+      onUndo={() => void runAction({ action: "undo-last", tableId: data.activeTableId })}
+      onImport={() => { setDropFile(undefined); setImportOpen(true); }}
+      onExport={() => void exportCurrent()}
+      onPlayerView={openPlayerView}
+      onToggleCompact={toggleCompact}
+      onToggleFullscreen={() => void toggleFullscreen()}
+      compact={compact}
+      fullscreen={fullscreen}
+      loading={loading}
+      status={status}
+    />}
+    pageHeader={<PageHeader
+      view={view}
+      systemName={currentSystem?.name ?? "Sistema"}
+      activeTabTitle={activeEditableTab?.title}
+      editMode={editMode}
+      itemEditMode={itemEditMode}
+      editTimeoutMinutes={editTimeoutMinutes}
+      compact={compact}
+    />}
+    tabStrip={tabs.length > 0 ? (
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 bg-card/60 px-3 py-2 lg:px-5" aria-label="Conteúdos abertos">
+        {tabs.map((tab) => (
+          <div key={tab.id} className={`flex shrink-0 items-center rounded-lg border ${activeTabId === tab.id ? "border-primary/45 bg-primary/10" : "border-border bg-secondary/60"}`}>
+            <button
+              type="button"
+              aria-current={activeTabId === tab.id ? "page" : undefined}
+              onClick={() => openTab(tab)}
+              className="max-w-52 truncate px-3 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title={tab.title}
+            >{tab.title}</button>
+            <button type="button" aria-label={`Destacar ${tab.title} em outra janela`} onClick={() => detachTab(tab)} className="rounded-md px-1.5 py-1.5 text-muted-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" title="Destacar em outra janela"><ExternalLink aria-hidden="true" className="size-3.5" /></button>
+            <button type="button" aria-label={`Fechar ${tab.title}`} onClick={() => closeTab(tab.id)} className="rounded-md py-1.5 pl-1.5 pr-2 text-muted-foreground hover:text-destructive focus-visible:outline-2 focus-visible:outline-ring"><X aria-hidden="true" className="size-3.5" /></button>
+          </div>
+        ))}
       </div>
-      <div className={`mt-2 flex items-center justify-between gap-3 rounded-lg border px-3 py-1.5 text-xs font-semibold ${editMode ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : itemEditMode ? "border-blue-500/30 bg-blue-500/10 text-blue-300" : "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"}`}><span>{editMode ? "✎ MODO EDIÇÃO GLOBAL — alterações estão liberadas" : itemEditMode ? `✎ EDIÇÃO DO ITEM — ${activeEditableTab?.title ?? "conteúdo atual"}` : "🔒 MODO LEITURA — campos protegidos contra alterações"}</span>{effectiveEdit && editTimeoutMinutes > 0 && <span className="font-normal opacity-70">bloqueio automático em {editTimeoutMinutes} min</span>}</div>
-      <nav className="mt-2 flex gap-1 overflow-x-auto">{navigation.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => { setView(item.id); setItemEditMode(false); }} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${view === item.id ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"}`}><Icon className="h-4 w-4" />{item.label}</button>; })}</nav>
-      {tabs.length > 0 && <div className="mt-2 flex gap-1 overflow-x-auto border-t border-zinc-800/70 pt-2">{tabs.map((tab) => <div key={tab.id} className={`flex shrink-0 items-center rounded-lg border ${activeTabId === tab.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-900"}`}><button onClick={() => openTab(tab)} className="max-w-52 truncate px-3 py-1.5 text-xs text-zinc-300">{tab.title}</button><button onClick={() => detachTab(tab)} className="px-1.5 text-zinc-500 hover:text-amber-300" title="Destacar em outra janela"><ExternalLink className="h-3.5 w-3.5" /></button><button onClick={() => closeTab(tab.id)} className="px-1.5 pr-2 text-zinc-600 hover:text-red-300"><X className="h-3.5 w-3.5" /></button></div>)}</div>}
-    </header>
-
+    ) : undefined}
+  >
     <section className={`workspace-content min-h-0 flex-1 overflow-hidden ${editMode ? "workspace-editing" : itemEditMode ? "workspace-readonly workspace-item-edit" : "workspace-readonly"}`} onBeforeInputCapture={protectReadModeFormEvent} onPasteCapture={protectReadModeClipboard} onCutCapture={protectReadModeClipboard} onKeyDownCapture={protectReadModeKeyDown} onInputCapture={touchEdit} onPointerDownCapture={touchEdit}>
       {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} onContinue={() => setView(data.runtime?.activeSessionId ? "session-mode" : "sheets")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
       {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} /></div>}
@@ -378,5 +406,5 @@ export function SystemWorkspace() {
     </section>
 
     {importOpen && <ImportDialog data={data} action={runAction} previewImport={previewImport} initialFile={dropFile} onClose={() => { setImportOpen(false); setDropFile(undefined); }} onFinish={(tableId) => void load(tableId)} />}
-  </main>;
+  </AppShell>;
 }
