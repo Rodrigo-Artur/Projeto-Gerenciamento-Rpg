@@ -69,6 +69,8 @@ export function SystemWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string>();
   const [compact, setCompact] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -149,7 +151,7 @@ export function SystemWorkspace() {
         setEditMode((current) => !current);
         setEditActivity(Date.now());
       }
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z" && !insideEditableField) {
+      if (editMode && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z" && !insideEditableField) {
         event.preventDefault();
         void runAction({ action: "undo-last", tableId: data.activeTableId });
       }
@@ -159,21 +161,51 @@ export function SystemWorkspace() {
   });
 
   useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearchError(undefined);
+      setSearchLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setSearchLoading(true);
+    setSearchError(undefined);
+    setSearchResults([]);
+
     const timer = window.setTimeout(() => {
-      if (!searchQuery.trim()) {
-        setSearchResults([]);
-        return;
-      }
-      void search(searchQuery).then((results) => {
-        setSearchResults(results);
-        setSearchOpen(true);
-      });
+      void search(query, data.activeTableId, controller.signal)
+        .then((results) => {
+          if (!controller.signal.aborted) setSearchResults(results);
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setSearchError(error instanceof Error ? error.message : "Erro ao pesquisar.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearchLoading(false);
+        });
     }, 250);
-    return () => window.clearTimeout(timer);
-  }, [search, searchQuery]);
+
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [search, searchQuery, data.activeTableId]);
 
   async function runAction(payload: Record<string, unknown>, options?: { silent?: boolean; reloadTableId?: string }) {
     return action(payload, options) as Promise<Record<string, unknown>>;
+  }
+
+  function switchTable(tableId: string) {
+    if (!tableId || tableId === data.activeTableId) return;
+    // Mesa diferente: pesquisa, permissões temporárias e foco anterior são descartados.
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError(undefined);
+    setSearchOpen(false);
+    setEditMode(false);
+    setItemEditMode(false);
+    setActiveTabId("");
+    void load(tableId);
   }
 
   function addTab(type: string, id: string, name: string) {
@@ -331,12 +363,14 @@ export function SystemWorkspace() {
       activeTableId={data.activeTableId}
       activeSystemName={currentSystem?.name ?? "Sistema"}
       sessionActive={Boolean(data.runtime?.activeSessionId)}
-      onTableChange={(tableId) => void load(tableId)}
+      onTableChange={switchTable}
       onOpenSidebar={() => setMobileMenuOpen(true)}
       searchRef={searchRef}
       searchQuery={searchQuery}
       searchResults={searchResults}
       searchOpen={searchOpen}
+      searchLoading={searchLoading}
+      searchError={searchError}
       onSearchChange={setSearchQuery}
       onSearchOpen={setSearchOpen}
       onSearchResult={openSearchResult}
@@ -352,8 +386,8 @@ export function SystemWorkspace() {
         window.localStorage.setItem("mesa-do-mestre-edit-timeout", String(minutes));
         setEditActivity(Date.now());
       }}
-      onUndo={() => void runAction({ action: "undo-last", tableId: data.activeTableId })}
-      onImport={() => { setDropFile(undefined); setImportOpen(true); }}
+      onUndo={() => { if (editMode) void runAction({ action: "undo-last", tableId: data.activeTableId }); }}
+      onImport={() => { if (!editMode) return; setDropFile(undefined); setImportOpen(true); }}
       onExport={() => void exportCurrent()}
       onPlayerView={openPlayerView}
       onToggleCompact={toggleCompact}
@@ -391,7 +425,7 @@ export function SystemWorkspace() {
     ) : undefined}
   >
     <section className={`workspace-content min-h-0 flex-1 overflow-hidden ${editMode ? "workspace-editing" : itemEditMode ? "workspace-readonly workspace-item-edit" : "workspace-readonly"}`} onBeforeInputCapture={protectReadModeFormEvent} onPasteCapture={protectReadModeClipboard} onCutCapture={protectReadModeClipboard} onKeyDownCapture={protectReadModeKeyDown} onInputCapture={touchEdit} onPointerDownCapture={touchEdit}>
-      {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} onContinue={() => setView(data.runtime?.activeSessionId ? "session-mode" : "sheets")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
+      {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} onContinue={() => setView(data.runtime?.activeSessionId ? "session-mode" : "sheets")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={switchTable} onOpenRecent={openRecent} /></div>}
       {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} /></div>}
       {view === "dashboard" && <div className={`${contentHeight} overflow-y-auto`}><DashboardView data={data} recent={recent} action={runAction} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
       {view === "rules" && <div className={contentHeight}><RulesView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab?.type === "rule" ? focusId : undefined} /></div>}
