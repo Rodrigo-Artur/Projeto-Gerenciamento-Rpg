@@ -204,3 +204,89 @@ button:disabled { cursor: not-allowed; }
 .compact-workspace aside { --compact-scale: 0.94; }
 
 * { scrollbar-width: thin; scrollbar-color: rgb(63 63 70) rgb(9 9 11); }
+
+/* A3 — acabamento sem quebrar os componentes e botões legados da v4. */
+.top-action-button,
+.secondary-button,
+.icon-button,
+.mini-combat {
+  border-color: var(--mdm-border);
+  background: var(--mdm-surface-raised);
+  color: var(--mdm-text);
+}
+
+.top-action-button:hover:not(:disabled),
+.secondary-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.mini-combat:hover:not(:disabled) {
+  border-color: var(--mdm-gold);
+  color: var(--mdm-gold-hover);
+  background: var(--mdm-surface-hover);
+}
+
+.primary-button {
+  border-color: var(--mdm-gold);
+  background: var(--mdm-gold);
+  color: var(--mdm-on-gold);
+}
+.primary-button:hover:not(:disabled) {
+  border-color: var(--mdm-gold-hover);
+  background: var(--mdm-gold-hover);
+}
+.field {
+  border-color: var(--mdm-border);
+  background: var(--mdm-canvas);
+  color: var(--mdm-text);
+  border-radius: var(--mdm-radius-md);
+}
+.field::placeholder { color: var(--mdm-text-subtle); }
+.field:focus-visible {
+  border-color: var(--mdm-gold);
+  box-shadow: 0 0 0 3px rgb(225 182 93 / 0.15);
+}
+.form-label { color: var(--mdm-text-muted); }
+.workspace-readonly .form-label { color: var(--mdm-text-subtle); }
+
+/* Botões explicitamente marcados como navegação seguem disponíveis em Leitura.
+ * Os demais botões de alteração mantêm o bloqueio legado. */
+.workspace-readonly .primary-button[data-nonmutating="true"],
+.workspace-readonly .secondary-button[data-nonmutating="true"],
+.workspace-readonly .icon-button[data-nonmutating="true"],
+.workspace-readonly .mini-combat[data-nonmutating="true"] {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+}
+
+/* Em telas pequenas a lista fica acima do detalhe, com rolagens independentes.
+ * Em desktop mantém a largura original de cada módulo. */
+.workspace-list-detail {
+  --mdm-detail-sidebar: 300px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(160px, 35%) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.workspace-list-detail--280 { --mdm-detail-sidebar: 280px; }
+.workspace-list-detail--300 { --mdm-detail-sidebar: 300px; }
+.workspace-list-detail--330 { --mdm-detail-sidebar: 330px; }
+.workspace-list-detail > aside,
+.workspace-list-detail > section {
+  min-width: 0;
+  min-height: 0;
+}
+.workspace-list-detail > aside {
+  border-right: 0;
+  border-bottom: 1px solid var(--mdm-border);
+}
+@media (min-width: 768px) {
+  .workspace-list-detail {
+    grid-template-columns: var(--mdm-detail-sidebar) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .workspace-list-detail > aside {
+    border-right: 1px solid var(--mdm-border);
+    border-bottom: 0;
+  }
+}
