@@ -37,10 +37,10 @@ export function HomeView({
             {activeSession && <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300"><Play className="h-3.5 w-3.5" />Sessão em andamento: {activeSession.title}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={onContinue} className="primary-button"><Play className="h-4 w-4" />Continuar</button>
-            <button onClick={onSession} className="secondary-button"><CalendarDays className="h-4 w-4" />Modo sessão</button>
-            <button onClick={onCombat} className="secondary-button"><Swords className="h-4 w-4" />Combate</button>
-            <button onClick={onLibrary} className="secondary-button"><Library className="h-4 w-4" />Biblioteca</button>
+            <button data-nonmutating="true" onClick={onContinue} className="primary-button"><Play className="h-4 w-4" />Continuar</button>
+            <button data-nonmutating="true" onClick={onSession} className="secondary-button"><CalendarDays className="h-4 w-4" />Modo sessão</button>
+            <button data-nonmutating="true" onClick={onCombat} className="secondary-button"><Swords className="h-4 w-4" />Combate</button>
+            <button data-nonmutating="true" onClick={onLibrary} className="secondary-button"><Library className="h-4 w-4" />Biblioteca</button>
           </div>
         </div>
       </section>
