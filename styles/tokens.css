@@ -1,0 +1,94 @@
+/*
+ * Mesa do Mestre — Design System v5 / A1.
+ * Valores semânticos independentes de Tailwind: podem ser usados tanto em
+ * CSS quanto em componentes React.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Cores base — contraste confortável para sessões longas */
+  --mdm-canvas: #0b0d12;
+  --mdm-surface: #151922;
+  --mdm-surface-raised: #202633;
+  --mdm-surface-hover: #2a3240;
+  --mdm-text: #e9edf4;
+  --mdm-text-muted: #b0bac9;
+  --mdm-text-subtle: #8793a6;
+  --mdm-border: #364052;
+  --mdm-border-strong: #526078;
+
+  /* Significado consistente: ação, informação, sucesso, aviso, perigo */
+  --mdm-gold: #e1b65d;
+  --mdm-gold-hover: #f0c877;
+  --mdm-on-gold: #14171d;
+  --mdm-blue: #78b7ee;
+  --mdm-green: #66d6a7;
+  --mdm-red: #f18d94;
+  --mdm-warning: #edc077;
+
+  /* Ritmo e dimensões compartilhadas */
+  --mdm-space-1: 0.25rem;
+  --mdm-space-2: 0.5rem;
+  --mdm-space-3: 0.75rem;
+  --mdm-space-4: 1rem;
+  --mdm-space-5: 1.25rem;
+  --mdm-space-6: 1.5rem;
+  --mdm-space-8: 2rem;
+  --mdm-radius-sm: 0.5rem;
+  --mdm-radius-md: 0.625rem;
+  --mdm-radius-lg: 0.75rem;
+  --mdm-radius-xl: 1rem;
+  --mdm-duration-fast: 120ms;
+  --mdm-duration-normal: 180ms;
+  --mdm-shadow-panel: 0 12px 36px rgb(0 0 0 / 0.26);
+  --mdm-shadow-dialog: 0 24px 80px rgb(0 0 0 / 0.55);
+
+  /* Aliases para componentes baseados em tokens semânticos (shadcn/Radix). */
+  --background: var(--mdm-canvas);
+  --foreground: var(--mdm-text);
+  --card: var(--mdm-surface);
+  --card-foreground: var(--mdm-text);
+  --popover: var(--mdm-surface-raised);
+  --popover-foreground: var(--mdm-text);
+  --primary: var(--mdm-gold);
+  --primary-foreground: var(--mdm-on-gold);
+  --secondary: var(--mdm-surface-raised);
+  --secondary-foreground: var(--mdm-text);
+  --muted: var(--mdm-surface-raised);
+  --muted-foreground: var(--mdm-text-muted);
+  --accent: var(--mdm-surface-hover);
+  --accent-foreground: var(--mdm-text);
+  --destructive: var(--mdm-red);
+  --border: var(--mdm-border);
+  --input: var(--mdm-border-strong);
+  --ring: var(--mdm-gold);
+  --radius: var(--mdm-radius-lg);
+}
+
+/* Anéis de foco visíveis também para controles antigos. */
+:where(button, input, textarea, select, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--mdm-gold);
+  outline-offset: 2px;
+}
+
+:where(button, input, textarea, select):disabled {
+  cursor: not-allowed;
+}
+
+/* O modo de alto contraste fica disponível sem criar tema claro prematuro. */
+@media (prefers-contrast: more) {
+  :root {
+    --mdm-text-muted: #d5dce8;
+    --mdm-border: #768399;
+    --mdm-border-strong: #a3afc2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
