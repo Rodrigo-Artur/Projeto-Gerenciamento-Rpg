@@ -2,7 +2,7 @@
 
 import {
   BookOpen, Command, CornerDownLeft, FileText, FolderOpen, Heart, History,
-  Keyboard, LoaderCircle, Map, Search, UserRound, Users,
+  Keyboard, LoaderCircle, Map as MapIcon, Search, UserRound, Users,
   type LucideIcon,
 } from "lucide-react";
 import { useId, useState, type KeyboardEvent, type RefObject } from "react";
@@ -53,7 +53,7 @@ type GlobalSearchProps = {
 
 const searchTypeIcons: Record<string, LucideIcon> = {
   npc: UserRound, player: Users, rule: BookOpen, note: FileText,
-  session: History, entity: Map, item: FolderOpen, location: Map,
+  session: History, entity: MapIcon, item: FolderOpen, location: MapIcon,
   faction: Users, quest: FileText, timeline: History, handout: FileText,
 };
 
