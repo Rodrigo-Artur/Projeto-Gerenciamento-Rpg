@@ -42,6 +42,7 @@ export function useWorkspaceApi(playerView = false) {
   const [lastSavedAt, setLastSavedAt] = useState<string>();
   const loadGeneration = useRef(0);
   const appliedTableId = useRef<string | undefined>(undefined);
+  const requestedTableId = useRef<string | undefined>(undefined);
 
   const applyResponse = useCallback((response: WorkspaceResponse, clearRecents = false) => {
     // Ações de criação/duplicação de mesas podem trocar a mesa sem GET.
@@ -53,6 +54,7 @@ export function useWorkspaceApi(playerView = false) {
   }, []);
 
   const load = useCallback(async (tableId?: string) => {
+    requestedTableId.current = tableId;
     // Uma resposta atrasada não pode trocar a mesa que o usuário já selecionou.
     const generation = ++loadGeneration.current;
     setLoading(true);
@@ -79,6 +81,8 @@ export function useWorkspaceApi(playerView = false) {
       if (generation === loadGeneration.current) setLoading(false);
     }
   }, [applyResponse, playerView]);
+
+  const retryLoad = useCallback(() => load(requestedTableId.current), [load]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -145,6 +149,6 @@ export function useWorkspaceApi(playerView = false) {
   return {
     data, recent, status, statusKind, loading, loadError, saveError, lastSavedAt,
     clearSaveError: () => setSaveError(null),
-    setData, load, action, search, previewImport, recordRecent,
+    setData, load, retryLoad, action, search, previewImport, recordRecent,
   };
 }
