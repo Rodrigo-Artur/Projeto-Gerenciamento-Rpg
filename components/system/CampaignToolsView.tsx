@@ -12,11 +12,11 @@ type RefOption = { value: string; type: CampaignRelation["sourceType"]; id: stri
 export function CampaignToolsView({ data, action }: { data: RulebookData; action: Action }) {
   const [mode, setMode] = useState<"relations" | "calendar">("relations");
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="mdm-module h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
-          <button onClick={() => setMode("relations")} className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${mode === "relations" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}><UsersRound className="mr-2 inline h-4 w-4" />Relações</button>
-          <button onClick={() => setMode("calendar")} className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${mode === "calendar" ? "bg-amber-500 text-zinc-950" : "text-zinc-400"}`}><CalendarDays className="mr-2 inline h-4 w-4" />Calendário</button>
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-card p-1">
+          <button onClick={() => setMode("relations")} className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${mode === "relations" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><UsersRound className="mr-2 inline h-4 w-4" />Relações</button>
+          <button onClick={() => setMode("calendar")} className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${mode === "calendar" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><CalendarDays className="mr-2 inline h-4 w-4" />Calendário</button>
         </div>
         {mode === "relations" ? <Relations data={data} action={action} /> : <Calendar data={data} action={action} />}
       </div>
@@ -53,8 +53,8 @@ function Relations({ data, action }: { data: RulebookData; action: Action }) {
   }, [data.relations]);
 
   return <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-    <aside className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5">
-      <p className="flex items-center gap-2 font-semibold text-zinc-100"><Link2 className="h-4 w-4 text-amber-400" />Nova relação</p>
+    <aside className="mdm-section-card rounded-xl border border-border bg-card/70 p-5">
+      <p className="flex items-center gap-2 font-semibold text-foreground"><Link2 className="h-4 w-4 text-primary" />Nova relação</p>
       <label className="form-label mt-4">Origem<select className="field mt-2" value={source} onChange={(event) => setSource(event.target.value)}>{options.map((item) => <option key={item.value} value={item.value}>{item.type} — {item.name}</option>)}</select></label>
       <label className="form-label mt-3">Relação<input className="field mt-2" value={relation} onChange={(event) => setRelation(event.target.value)} placeholder="irmão, inimigo, aliado, respeita..." /></label>
       <label className="form-label mt-3">Alvo<select className="field mt-2" value={target} onChange={(event) => setTarget(event.target.value)}>{options.map((item) => <option key={item.value} value={item.value}>{item.type} — {item.name}</option>)}</select></label>
@@ -62,7 +62,7 @@ function Relations({ data, action }: { data: RulebookData; action: Action }) {
       <button onClick={() => void add()} className="primary-button mt-4 w-full"><Plus className="h-4 w-4" />Adicionar relação</button>
     </aside>
     <section className="space-y-4">
-      {grouped.length === 0 ? <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">Nenhuma relação registrada.</div> : grouped.map(([key, items]) => <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"><h3 className="font-semibold text-amber-300">{items[0]?.sourceName}</h3><div className="mt-3 grid gap-2 md:grid-cols-2">{items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3"><div><p className="text-sm text-zinc-200"><span className="text-zinc-500">{item.relation}</span> → {item.targetName}</p>{item.note && <p className="mt-1 text-xs text-zinc-500">{item.note}</p>}</div><button onClick={() => confirm(`Excluir a relação com ${item.targetName}?`) && void action({ action: "delete-relation", tableId: data.activeTableId, id: item.id })} className="text-red-300"><Trash2 className="h-4 w-4" /></button></div>)}</div></div>)}
+      {grouped.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Nenhuma relação registrada.</div> : grouped.map(([key, items]) => <div key={key} className="mdm-section-card rounded-xl border border-border bg-card/60 p-4"><h3 className="font-semibold text-primary">{items[0]?.sourceName}</h3><div className="mt-3 grid gap-2 md:grid-cols-2">{items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background p-3"><div><p className="text-sm text-foreground"><span className="text-muted-foreground">{item.relation}</span> → {item.targetName}</p>{item.note && <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>}</div><button onClick={() => confirm(`Excluir a relação com ${item.targetName}?`) && void action({ action: "delete-relation", tableId: data.activeTableId, id: item.id })} className="text-destructive"><Trash2 className="h-4 w-4" /></button></div>)}</div></div>)}
     </section>
   </div>;
 }
@@ -100,17 +100,17 @@ function Calendar({ data, action }: { data: RulebookData; action: Action }) {
   const upcoming = [...draft.events].sort((a, b) => (a.year - b.year) || (a.month - b.month) || (a.day - b.day));
 
   return <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-    <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5">
-      <div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Tempo do mundo</p><h3 className="mt-1 text-2xl font-black text-zinc-100">Dia {draft.day} / Mês {draft.month} / Ano {draft.year}</h3><p className="text-sm text-zinc-500">{draft.calendarName ?? "Calendário da campanha"}</p></div>
+    <aside className="space-y-4 rounded-xl border border-border bg-card/70 p-5">
+      <div><p className="mdm-section-kicker text-xs uppercase tracking-[0.2em] text-primary">Tempo do mundo</p><h3 className="mt-1 text-2xl font-black text-foreground">Dia {draft.day} / Mês {draft.month} / Ano {draft.year}</h3><p className="text-sm text-muted-foreground">{draft.calendarName ?? "Calendário da campanha"}</p></div>
       <div className="grid grid-cols-3 gap-2"><button onClick={() => advance(1)} className="secondary-button">+1 dia</button><button onClick={() => advance(7)} className="secondary-button">+7 dias</button><button onClick={() => advance(30)} className="secondary-button">+30 dias</button></div>
       <div className="grid grid-cols-3 gap-2"><input type="number" value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) || 1 })} className="field" /><input type="number" value={draft.month} onChange={(event) => setDraft({ ...draft, month: Number(event.target.value) || 1 })} className="field" /><input type="number" value={draft.year} onChange={(event) => setDraft({ ...draft, year: Number(event.target.value) || 1 })} className="field" /></div>
       <input value={draft.calendarName ?? ""} onChange={(event) => setDraft({ ...draft, calendarName: event.target.value })} className="field" placeholder="Nome do calendário" />
       <button onClick={() => void save()} className="primary-button w-full">Salvar calendário</button>
     </aside>
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-      <h3 className="font-semibold text-zinc-100">Eventos programados</h3>
+    <section className="mdm-section-card rounded-xl border border-border bg-card/60 p-5">
+      <h3 className="font-semibold text-foreground">Eventos programados</h3>
       <div className="mt-4 grid gap-3 md:grid-cols-4"><input value={title} onChange={(event) => setTitle(event.target.value)} className="field md:col-span-2" placeholder="Título do evento" /><input type="number" value={eventDay} onChange={(event) => setEventDay(Number(event.target.value))} className="field" placeholder="Dia" /><input type="number" value={eventMonth} onChange={(event) => setEventMonth(Number(event.target.value))} className="field" placeholder="Mês" /><input type="number" value={eventYear} onChange={(event) => setEventYear(Number(event.target.value))} className="field" placeholder="Ano" /><textarea value={description} onChange={(event) => setDescription(event.target.value)} className="field md:col-span-2" rows={2} placeholder="Descrição" /><button onClick={addEvent} className="primary-button"><Plus className="h-4 w-4" />Adicionar</button></div>
-      <div className="mt-5 space-y-2">{upcoming.map((event) => <div key={event.id} className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${(event.year === draft.year && event.month === draft.month && event.day === draft.day) ? "border-amber-500/60 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}><div><p className="text-xs text-amber-400">{event.day}/{event.month}/{event.year}</p><p className="font-medium text-zinc-200">{event.title}</p>{event.description && <p className="mt-1 text-sm text-zinc-500">{event.description}</p>}</div><div className="flex items-center gap-2"><button onClick={() => void save({ ...draft, events: draft.events.map((item) => item.id === event.id ? { ...item, visibility: item.visibility === "players" ? "master" : "players" } : item) })} className="text-xs text-zinc-400">{event.visibility === "players" ? "Público" : "Mestre"}</button><button onClick={() => void save({ ...draft, events: draft.events.filter((item) => item.id !== event.id) })} className="text-red-300"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>
+      <div className="mt-5 space-y-2">{upcoming.map((event) => <div key={event.id} className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${(event.year === draft.year && event.month === draft.month && event.day === draft.day) ? "border-primary/60 bg-primary/10" : "border-border bg-background"}`}><div><p className="text-xs text-primary">{event.day}/{event.month}/{event.year}</p><p className="font-medium text-foreground">{event.title}</p>{event.description && <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>}</div><div className="flex items-center gap-2"><button onClick={() => void save({ ...draft, events: draft.events.map((item) => item.id === event.id ? { ...item, visibility: item.visibility === "players" ? "master" : "players" } : item) })} className="text-xs text-muted-foreground">{event.visibility === "players" ? "Público" : "Mestre"}</button><button onClick={() => void save({ ...draft, events: draft.events.filter((item) => item.id !== event.id) })} className="text-destructive"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>
     </section>
   </div>;
 }

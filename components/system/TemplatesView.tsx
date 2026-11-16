@@ -4,6 +4,7 @@ import { Plus, Settings2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { SystemConfigEditor } from "@/components/system/SystemConfigEditor";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import type { RulebookData, SheetCategory, SheetTemplate, TemplateField, TemplateFieldType } from "@/types/rulebook";
 
 const kinds: SheetTemplate["kind"][] = ["player", "npc", "boss", "monster", "companion", "custom"];
@@ -33,28 +34,28 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
   }
 
   return (
-    <div className="grid h-full grid-cols-[320px_1fr] overflow-hidden">
-      <aside className="overflow-y-auto border-r border-zinc-800 bg-zinc-900/60 p-4">
-        <button onClick={() => setSelectedId("__config__")} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${selectedId === "__config__" ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}>
-          <Settings2 className="h-4 w-4 text-amber-400" />
-          <div><p className="font-medium text-zinc-200">Configuração do sistema</p><p className="text-xs text-zinc-500">Atributos, recursos e categorias</p></div>
+    <div className="mdm-module workspace-list-detail workspace-list-detail--320 grid h-full min-h-0 overflow-hidden">
+      <aside className="mdm-list-pane mdm-scroll-area overflow-y-auto border-r border-border bg-card/60 p-4">
+        <button onClick={() => setSelectedId("__config__")} className={`mdm-list-entry flex w-full items-center gap-3 rounded-lg border p-3 text-left ${selectedId === "__config__" ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}>
+          <Settings2 className="h-4 w-4 text-primary" />
+          <div><p className="font-medium text-foreground">Configuração do sistema</p><p className="text-xs text-muted-foreground">Atributos, recursos e categorias</p></div>
         </button>
         <div className="mt-5 flex items-center justify-between gap-2">
-          <div><p className="text-sm font-semibold text-zinc-200">Templates</p><p className="text-xs text-zinc-500">{templates.length} modelo(s)</p></div>
+          <div><p className="text-sm font-semibold text-foreground">Templates</p><p className="text-xs text-muted-foreground">{templates.length} modelo(s)</p></div>
           <button onClick={() => void createTemplate()} className="icon-button"><Plus className="h-4 w-4" /></button>
         </div>
         <div className="mt-4 space-y-2">
           {templates.map((template) => (
-            <button key={template.id} onClick={() => setSelectedId(template.id)} className={`w-full rounded-lg border p-3 text-left ${selected?.id === template.id ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-950"}`}>
-              <p className="font-medium text-zinc-200">{template.name}</p>
-              <p className="mt-1 text-xs text-zinc-500">{template.kind} • {template.fields.length} campos</p>
+            <button key={template.id} onClick={() => setSelectedId(template.id)} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selected?.id === template.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}>
+              <p className="font-medium text-foreground">{template.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{template.kind} • {template.fields.length} campos</p>
             </button>
           ))}
         </div>
       </aside>
-      <section className="overflow-y-auto p-6">
+      <section className="mdm-detail-pane mdm-scroll-area overflow-y-auto p-6">
         {selectedId === "__config__" ? <SystemConfigEditor key={data.activeSystemId} data={data} action={action} /> : null}
-        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : null}
+        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : selectedId !== "__config__" ? <WorkspaceEmpty kind="templates" title="Template não encontrado" description="Selecione outro modelo de ficha ou crie um novo." /> : null}
       </section>
     </div>
   );
@@ -82,8 +83,8 @@ function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: Rul
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <div><p className="text-xs uppercase tracking-[0.2em] text-amber-400">Construtor de sistema</p><h2 className="mt-1 text-2xl font-bold">{draft.name}</h2><p className="text-sm text-zinc-500">As mesas que usam este sistema podem criar fichas a partir deste modelo.</p></div>
-        <button onClick={async () => { if (confirm(`Excluir o template ${draft.name}?`)) await action({ action: "delete-template", tableId: data.activeTableId, systemId: data.activeSystemId, id: draft.id }); }} className="icon-button text-red-300"><Trash2 className="h-4 w-4" /></button>
+        <div><p className="mdm-section-kicker text-xs uppercase tracking-[0.2em] text-primary">Construtor de sistema</p><h2 className="mt-1 text-2xl font-bold">{draft.name}</h2><p className="text-sm text-muted-foreground">As mesas que usam este sistema podem criar fichas a partir deste modelo.</p></div>
+        <button onClick={async () => { if (confirm(`Excluir o template ${draft.name}?`)) await action({ action: "delete-template", tableId: data.activeTableId, systemId: data.activeSystemId, id: draft.id }); }} className="icon-button text-destructive"><Trash2 className="h-4 w-4" /></button>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Nome" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
@@ -92,24 +93,24 @@ function TemplateEditor({ item, data, action }: { item: SheetTemplate; data: Rul
         <Field label="Descrição" value={draft.description} onChange={(value) => setDraft({ ...draft, description: value })} />
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-        <div className="flex items-center justify-between"><div><p className="font-semibold text-zinc-100">Campos da ficha</p><p className="text-xs text-zinc-500">Defina seções, tipos, opções e valores padrão.</p></div><button onClick={addField} className="secondary-button"><Plus className="h-3.5 w-3.5" />Campo</button></div>
+      <div className="rounded-xl border border-border bg-card/60 p-4">
+        <div className="flex items-center justify-between"><div><p className="font-semibold text-foreground">Campos da ficha</p><p className="text-xs text-muted-foreground">Defina seções, tipos, opções e valores padrão.</p></div><button onClick={addField} className="secondary-button"><Plus className="h-3.5 w-3.5" />Campo</button></div>
         <div className="mt-4 space-y-3">
           {draft.fields.map((field, index) => (
-            <div key={`${field.id}-${index}`} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+            <div key={`${field.id}-${index}`} className="rounded-lg border border-border bg-background p-4">
               <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_1fr_auto]">
                 <Field label="ID" value={field.id} onChange={(value) => patchField(index, { id: value })} />
                 <Field label="Rótulo" value={field.label} onChange={(value) => patchField(index, { label: value })} />
                 <label className="form-label">Tipo<select value={field.type} onChange={(event) => patchField(index, { type: event.target.value as TemplateFieldType })} className="field mt-2">{fieldTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
                 <Field label="Seção" value={field.section ?? "Geral"} onChange={(value) => patchField(index, { section: value })} />
-                <button onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, current) => current !== index) })} className="mt-6 icon-button text-red-300"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, current) => current !== index) })} className="mt-6 icon-button text-destructive"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <Field label="Valor padrão" value={typeof field.defaultValue === "string" || typeof field.defaultValue === "number" ? String(field.defaultValue) : ""} onChange={(value) => patchField(index, { defaultValue: value })} />
                 <Field label="Opções (separadas por vírgula)" value={field.options?.join(", ") ?? ""} onChange={(value) => patchField(index, { options: value.split(",").map((option) => option.trim()).filter(Boolean) })} />
                 <Field label="Ajuda" value={field.helpText ?? ""} onChange={(value) => patchField(index, { helpText: value })} />
               </div>
-              <label className="mt-3 flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => patchField(index, { required: event.target.checked })} />Campo obrigatório</label>
+              <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => patchField(index, { required: event.target.checked })} />Campo obrigatório</label>
             </div>
           ))}
         </div>
