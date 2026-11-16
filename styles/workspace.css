@@ -18,8 +18,8 @@
   scrollbar-gutter: stable;
 }
 
-.workspace-list-detail--320 { --mdm-detail-sidebar: 320px; }
-.workspace-list-detail--340 { --mdm-detail-sidebar: 340px; }
+.workspace-list-detail.workspace-list-detail--320 { --mdm-detail-sidebar: 320px; }
+.workspace-list-detail.workspace-list-detail--340 { --mdm-detail-sidebar: 340px; }
 
 .mdm-module .mdm-detail-pane {
   background: var(--mdm-canvas);
