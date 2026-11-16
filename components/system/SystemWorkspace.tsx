@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { homeFavorites } from "@/components/dashboard/home-data";
 import { AppSidebar, type ViewId } from "@/components/layout/AppSidebar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Topbar } from "@/components/layout/Topbar";
@@ -97,6 +98,7 @@ export function SystemWorkspace() {
   const activeTab = useMemo(() => tabs.find((item) => item.id === activeTabId), [activeTabId, tabs]);
   const activeEditableTab = activeTab?.view === view ? activeTab : undefined;
   const sheetData = useMemo(() => dataWithFocusedSheet(data, activeEditableTab), [activeEditableTab, data]);
+  const paletteFavorites = useMemo(() => homeFavorites(data), [data]);
   const effectiveEdit = editMode || itemEditMode;
 
   useEffect(() => {
@@ -143,7 +145,6 @@ export function SystemWorkspace() {
       const insideEditableField = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchRef.current?.focus();
         setSearchOpen(true);
       }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") {
@@ -171,7 +172,7 @@ export function SystemWorkspace() {
 
   useEffect(() => {
     const query = searchQuery.trim();
-    if (!query) {
+    if (!query || query.startsWith(">")) {
       setSearchResults([]);
       setSearchError(undefined);
       setSearchLoading(false);
@@ -394,12 +395,17 @@ export function SystemWorkspace() {
       searchRef={searchRef}
       searchQuery={searchQuery}
       searchResults={searchResults}
+      recent={recent}
+      favorites={paletteFavorites}
       searchOpen={searchOpen}
       searchLoading={searchLoading}
       searchError={searchError}
       onSearchChange={setSearchQuery}
-      onSearchOpen={setSearchOpen}
+      onSearchOpen={(open) => { setSearchOpen(open); if (!open) setSearchQuery(""); }}
       onSearchResult={openSearchResult}
+      onOpenRecent={openRecent}
+      onOpenFavorite={(item) => openContent(item.type, item.id, item.name)}
+      onNavigate={(nextView) => { setView(nextView); setItemEditMode(false); }}
       editMode={editMode}
       itemEditMode={itemEditMode}
       canEditItem={Boolean(activeEditableTab)}

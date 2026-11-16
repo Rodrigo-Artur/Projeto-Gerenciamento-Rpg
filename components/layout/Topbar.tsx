@@ -2,14 +2,16 @@
 
 import {
   Database, Download, Eye, Maximize2, Menu, Minimize2,
-  Rows3, Undo2, Upload,
+  Rows3, Undo2, Upload, Library, Settings2,
 } from "lucide-react";
 import type { RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EditModeSwitch } from "@/components/layout/EditModeSwitch";
-import { GlobalSearch } from "@/components/layout/GlobalSearch";
-import type { SearchResult } from "@/hooks/useWorkspaceApi";
+import { GlobalSearch, type PaletteCommand } from "@/components/layout/GlobalSearch";
+import { navigationGroups, type ViewId } from "@/components/layout/AppSidebar";
+import type { HomeFavorite } from "@/components/dashboard/home-data";
+import type { RecentContent, SearchResult } from "@/hooks/useWorkspaceApi";
 import type { RpgTable } from "@/types/rulebook";
 
 type TopbarProps = {
@@ -22,12 +24,17 @@ type TopbarProps = {
   searchRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   searchResults: SearchResult[];
+  recent: RecentContent[];
+  favorites: HomeFavorite[];
   searchOpen: boolean;
   searchLoading: boolean;
   searchError?: string;
   onSearchChange: (query: string) => void;
   onSearchOpen: (open: boolean) => void;
   onSearchResult: (result: SearchResult) => void;
+  onOpenRecent: (item: RecentContent) => void;
+  onOpenFavorite: (item: HomeFavorite) => void;
+  onNavigate: (view: ViewId) => void;
   editMode: boolean;
   itemEditMode: boolean;
   canEditItem: boolean;
@@ -50,11 +57,80 @@ type TopbarProps = {
 
 export function Topbar({
   tables, activeTableId, activeSystemName, sessionActive, onTableChange, onOpenSidebar,
-  searchRef, searchQuery, searchResults, searchOpen, searchLoading, searchError, onSearchChange, onSearchOpen, onSearchResult,
+  searchRef, searchQuery, searchResults, recent, favorites, searchOpen, searchLoading, searchError, onSearchChange, onSearchOpen, onSearchResult, onOpenRecent, onOpenFavorite, onNavigate,
   editMode, itemEditMode, canEditItem, editTimeoutMinutes, onReadMode, onEditMode, onItemEditMode, onEditTimeoutChange,
   onUndo, onImport, onExport, onPlayerView, onToggleCompact, onToggleFullscreen, compact, fullscreen, loading, status,
 }: TopbarProps) {
   const statusError = /erro|falha/i.test(status);
+  // Somente comandos de navegação/visualização: a paleta funciona em Leitura.
+  const commands: PaletteCommand[] = [
+    ...navigationGroups.flatMap((group) =>
+      group.items.map((item) => ({
+        id: `view:${item.id}`,
+        title: item.label,
+        description: `Abrir seção · ${group.title}`,
+        group: "Navegação" as const,
+        icon: item.icon,
+        keywords: `ir para abrir ${group.title}`,
+        onSelect: () => onNavigate(item.id),
+      }))
+    ),
+    ...tables.filter((table) => table.id !== activeTableId).map((table) => ({
+      id: `table:${table.id}`,
+      title: table.name,
+      description: "Trocar de mesa",
+      group: "Mesas" as const,
+      icon: Library,
+      keywords: "campanha sistema trocar mesa",
+      onSelect: () => onTableChange(table.id),
+    })),
+    {
+      id: "tool:export",
+      title: "Exportar mesa",
+      description: "Baixar backup JSON da mesa atual",
+      group: "Ferramentas",
+      icon: Download,
+      keywords: "backup json download",
+      onSelect: onExport,
+    },
+    {
+      id: "tool:player",
+      title: "Abrir Tela Jogador",
+      description: "Exibir informações públicas em outra janela",
+      group: "Ferramentas",
+      icon: Eye,
+      keywords: "projetor jogadores publico tela",
+      onSelect: onPlayerView,
+    },
+    {
+      id: "tool:compact",
+      title: compact ? "Desativar modo compacto" : "Ativar modo compacto",
+      description: "Alternar a densidade visual da interface",
+      group: "Ferramentas",
+      icon: Rows3,
+      keywords: "layout densidade visual",
+      onSelect: onToggleCompact,
+    },
+    {
+      id: "tool:fullscreen",
+      title: fullscreen ? "Sair da tela cheia" : "Entrar em tela cheia",
+      description: "Alternar exibição em tela inteira",
+      group: "Ferramentas",
+      icon: fullscreen ? Minimize2 : Maximize2,
+      keywords: "fullscreen apresentação",
+      onSelect: onToggleFullscreen,
+    },
+    {
+      id: "tool:settings",
+      title: "Gerenciar mesas e sistemas",
+      description: "Abrir administração",
+      group: "Ferramentas",
+      icon: Settings2,
+      keywords: "criar editar mesa sistema configurações",
+      onSelect: () => onNavigate("dashboard"),
+    },
+  ];
+
   return (
     <header className="relative z-40 shrink-0 border-b border-border/70 bg-card/95 px-3 py-3 backdrop-blur lg:px-5">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -82,12 +158,17 @@ export function Topbar({
           inputRef={searchRef}
           query={searchQuery}
           results={searchResults}
+          recent={recent}
+          favorites={favorites}
+          commands={commands}
           open={searchOpen}
           loading={searchLoading}
           error={searchError}
           onQueryChange={onSearchChange}
           onOpenChange={onSearchOpen}
           onSelect={onSearchResult}
+          onOpenRecent={onOpenRecent}
+          onOpenFavorite={onOpenFavorite}
         />
 
         {sessionActive && <Badge variant="success" className="hidden shrink-0 xl:inline-flex"><span aria-hidden="true" className="size-2 rounded-full bg-success" />Sessão ativa</Badge>}
