@@ -4,6 +4,7 @@ import { Archive, CopyPlus, Image as ImageIcon, Library, PackagePlus, Plus, Sear
 import { useMemo, useState } from "react";
 
 import type { LibraryItem, LibraryItemType, RulebookData } from "@/types/rulebook";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 
 type Action = (payload: Record<string, unknown>, options?: { silent?: boolean }) => Promise<unknown>;
 
@@ -102,6 +103,7 @@ export function LibraryView({ data, action }: { data: RulebookData; action: Acti
 
       <section className="mdm-detail-pane mdm-scroll-area overflow-y-auto p-5">
         <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"><Search className="h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-sm text-foreground outline-none" placeholder="Pesquisar biblioteca..." /></label>
+        {filtered.length === 0 && <WorkspaceEmpty kind="library" title={query ? "Nenhum resultado" : "Biblioteca vazia"} description={query ? "Tente outra palavra-chave." : "Salve uma ficha, regra, item ou encontro para reutilizar em outras mesas."} />}
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((item) => <LibraryCard key={item.id} item={item} selected={selected.includes(item.id)} onSelect={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onApply={() => void action({ action: "apply-library", tableId: data.activeTableId, systemId: data.activeSystemId, id: item.id, name: item.name })} onDelete={() => confirm(`Excluir ${item.name} da biblioteca?`) && void action({ action: "delete-library", tableId: data.activeTableId, id: item.id })} />)}
         </div>
