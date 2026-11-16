@@ -32,11 +32,15 @@ export function useWorkspaceApi(playerView = false) {
   const [status, setStatus] = useState("Carregando...");
   const [loading, setLoading] = useState(true);
   const loadGeneration = useRef(0);
+  const appliedTableId = useRef<string>();
 
   const applyResponse = useCallback((response: WorkspaceResponse, clearRecents = false) => {
-    setData(normalize(response));
+    // Ações de criação/duplicação de mesas podem trocar a mesa sem GET.
+    // Não permitir que "Recentes" da mesa antiga permaneçam visíveis.
     if (response.recent !== undefined) setRecent(response.recent);
-    else if (clearRecents) setRecent([]);
+    else if (clearRecents || (appliedTableId.current !== undefined && appliedTableId.current !== response.activeTableId)) setRecent([]);
+    appliedTableId.current = response.activeTableId;
+    setData(normalize(response));
   }, []);
 
   const load = useCallback(async (tableId?: string) => {
