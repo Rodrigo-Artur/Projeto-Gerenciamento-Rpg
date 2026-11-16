@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { SystemConfigEditor } from "@/components/system/SystemConfigEditor";
 import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
+import { WorkspaceListEmpty } from "@/components/ui/workspace-feedback";
 import type { RulebookData, SheetCategory, SheetTemplate, TemplateField, TemplateFieldType } from "@/types/rulebook";
 
 const kinds: SheetTemplate["kind"][] = ["player", "npc", "boss", "monster", "companion", "custom"];
@@ -45,6 +46,7 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
           <button onClick={() => void createTemplate()} className="icon-button"><Plus className="h-4 w-4" /></button>
         </div>
         <div className="mt-4 space-y-2">
+          {templates.length === 0 && <WorkspaceListEmpty title="Sem templates" description="Ative a Edição para criar seu primeiro modelo de ficha." />}
           {templates.map((template) => (
             <button key={template.id} onClick={() => setSelectedId(template.id)} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selected?.id === template.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}>
               <p className="font-medium text-foreground">{template.name}</p>
