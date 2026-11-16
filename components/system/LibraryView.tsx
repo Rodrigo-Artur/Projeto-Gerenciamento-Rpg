@@ -36,10 +36,13 @@ export function LibraryView({ data, action, focusId }: { data: RulebookData; act
   ], [data]);
 
   useEffect(() => {
-    if (!focusId) return;
-    setQuery("");
-    document.getElementById(`mdm-library-${focusId}`)?.scrollIntoView({ block: "center", behavior: "instant" });
+    if (focusId) setQuery("");
   }, [focusId, data.activeTableId]);
+
+  useEffect(() => {
+    if (!focusId || query) return;
+    document.getElementById(`mdm-library-${focusId}`)?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [focusId, query, data.activeTableId]);
 
   const filtered = (data.library ?? []).filter((item) => !query.trim() || `${item.name} ${item.description} ${item.tags.join(" ")} ${item.type}`.toLowerCase().includes(query.toLowerCase()));
 
