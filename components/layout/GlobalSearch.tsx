@@ -5,7 +5,7 @@ import {
   Keyboard, LoaderCircle, Map as MapIcon, Search, UserRound, Users,
   type LucideIcon,
 } from "lucide-react";
-import { useId, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -83,6 +83,7 @@ export function GlobalSearch({
   onQueryChange, onOpenChange, onSelect, onOpenRecent, onOpenFavorite,
 }: GlobalSearchProps) {
   const listId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const rawQuery = query.trim();
   const commandOnly = rawQuery.startsWith(">");
@@ -164,6 +165,11 @@ export function GlobalSearch({
   const allEntries = sections.flatMap((section) => section.entries);
   const highlighted = Math.min(activeIndex, Math.max(0, allEntries.length - 1));
 
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, open, query, results.length]);
+
   function close() {
     onOpenChange(false);
     setActiveIndex(0);
@@ -242,6 +248,7 @@ export function GlobalSearch({
           </div>
 
           <div
+            ref={listRef}
             id={listId}
             role="listbox"
             aria-label="Sugestões da central de comandos"
