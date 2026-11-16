@@ -28,7 +28,7 @@ export function HomeView({
   const activeSession = data.sessions.find((item) => item.id === data.runtime?.activeSessionId);
   return (
     <div className="mdm-module mx-auto max-w-7xl space-y-8 p-6">
-      <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 p-7">
+      <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background p-7">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Mesa do Mestre</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-5">
           <div>
