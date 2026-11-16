@@ -4,6 +4,7 @@ import { CopyPlus, Eye, EyeOff, Image as ImageIcon, Plus, Save, Sparkles, Star, 
 import { useMemo, useState } from "react";
 
 import { useDebouncedAutosave, type AutosaveState } from "@/hooks/useDebouncedAutosave";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import type { ContentMeta, LabeledValue, NpcSheet, PlayerSheet, RulebookData, SheetCategory, SheetTemplate, StructuredAbility } from "@/types/rulebook";
 
 const fallbackCategories: SheetCategory[] = ["criminosos", "policia-umck", "ameacas-pesadas", "simbiontes", "bosses", "aliados", "monstros", "custom"];
@@ -133,4 +134,4 @@ function AbilityEditor({ abilities, resourceOptions, onChange }: { abilities: St
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="form-label">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="field mt-2" /></label>; }
 function Area({ label, value, onChange, rows }: { label: string; value: string; onChange: (value: string) => void; rows: number }) { return <label className="form-label block">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="field mt-2" /></label>; }
-function Empty() { return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Crie ou selecione uma ficha.</div>; }
+function Empty() { return <WorkspaceEmpty kind="sheets" title="Nenhuma ficha selecionada" description="Selecione um personagem ou crie um NPC ou player para editar." />; }
