@@ -4,6 +4,7 @@ import { Eye, EyeOff, Link2, NotebookPen, Plus, Save, Star, Trash2 } from "lucid
 import { useEffect, useMemo, useState } from "react";
 
 import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import type { ContentRef, RulebookData, SessionPlan, TableNote } from "@/types/rulebook";
 
 export function SessionsView({ data, action, onOpened, focusId }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusId?: string }) {
@@ -45,4 +46,4 @@ function NoteEditor({ item, data, action }: { item: TableNote; data: RulebookDat
 
 function SaveBar({ state, visibility, onSave }: { state: ReturnType<typeof useDebouncedAutosave>; visibility?: "master" | "players"; onSave: () => void }) { const text = state === "dirty" ? "● Alterações não salvas" : state === "saving" ? "Salvando..." : state === "error" ? "Erro no autosave" : "✓ Salvo automaticamente"; return <div className="flex items-center justify-between rounded-lg border border-border bg-card/60 p-3 text-xs text-muted-foreground"><span>{text} • {visibility === "players" ? "visível aos jogadores" : "somente mestre"}</span><button onClick={onSave} className="secondary-button"><Save className="h-3.5 w-3.5" />Salvar agora</button></div>; }
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="form-label">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="field mt-2" /></label>; }
-function Empty() { return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Crie uma nota ou prepare uma sessão.</div>; }
+function Empty() { return <WorkspaceEmpty kind="sessions" title="Nenhum registro selecionado" description="Prepare uma sessão ou crie uma nota para sua campanha." />; }
