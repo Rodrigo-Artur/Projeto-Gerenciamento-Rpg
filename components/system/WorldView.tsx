@@ -13,6 +13,7 @@ const types: Array<{ id: WorldEntityType; label: string }> = [
   { id: "faction", label: "Facções" },
   { id: "quest", label: "Missões" },
   { id: "timeline", label: "Timeline" },
+  { id: "calendar-event", label: "Eventos" },
 ];
 
 export function WorldView({ data, action, onOpened, focusId }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusId?: string }) {
