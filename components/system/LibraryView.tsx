@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, CopyPlus, Image as ImageIcon, Library, PackagePlus, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { LibraryItem, LibraryItemType, RulebookData } from "@/types/rulebook";
 import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
@@ -17,7 +17,7 @@ type CurrentSource = {
   payload: Record<string, unknown>;
 };
 
-export function LibraryView({ data, action }: { data: RulebookData; action: Action }) {
+export function LibraryView({ data, action, focusId }: { data: RulebookData; action: Action; focusId?: string }) {
   const [query, setQuery] = useState("");
   const [sourceKey, setSourceKey] = useState("");
   const [packName, setPackName] = useState("");
@@ -34,6 +34,11 @@ export function LibraryView({ data, action }: { data: RulebookData; action: Acti
     ...(data.templates ?? []).map((item) => ({ key: `template:${item.id}`, type: "template" as const, name: item.name, description: item.description, payload: item as unknown as Record<string, unknown> })),
     ...(data.combats ?? []).map((item) => ({ key: `encounter:${item.id}`, type: "encounter" as const, name: item.name, description: `${item.participants.length} participantes`, payload: item as unknown as Record<string, unknown> })),
   ], [data]);
+
+  useEffect(() => {
+    if (!focusId) return;
+    document.getElementById(`mdm-library-${focusId}`)?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [focusId, data.activeTableId]);
 
   const filtered = (data.library ?? []).filter((item) => !query.trim() || `${item.name} ${item.description} ${item.tags.join(" ")} ${item.type}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -105,15 +110,15 @@ export function LibraryView({ data, action }: { data: RulebookData; action: Acti
         <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"><Search className="h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-sm text-foreground outline-none" placeholder="Pesquisar biblioteca..." /></label>
         {filtered.length === 0 && <WorkspaceEmpty kind="library" title={query ? "Nenhum resultado" : "Biblioteca vazia"} description={query ? "Tente outra palavra-chave." : "Salve uma ficha, regra, item ou encontro para reutilizar em outras mesas."} />}
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((item) => <LibraryCard key={item.id} item={item} selected={selected.includes(item.id)} onSelect={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onApply={() => void action({ action: "apply-library", tableId: data.activeTableId, systemId: data.activeSystemId, id: item.id, name: item.name })} onDelete={() => confirm(`Excluir ${item.name} da biblioteca?`) && void action({ action: "delete-library", tableId: data.activeTableId, id: item.id })} />)}
+          {filtered.map((item) => <LibraryCard key={item.id} item={item} focused={item.id === focusId} selected={selected.includes(item.id)} onSelect={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onApply={() => void action({ action: "apply-library", tableId: data.activeTableId, systemId: data.activeSystemId, id: item.id, name: item.name })} onDelete={() => confirm(`Excluir ${item.name} da biblioteca?`) && void action({ action: "delete-library", tableId: data.activeTableId, id: item.id })} />)}
         </div>
       </section>
     </div>
   );
 }
 
-function LibraryCard({ item, selected, onSelect, onApply, onDelete }: { item: LibraryItem; selected: boolean; onSelect: () => void; onApply: () => void; onDelete: () => void }) {
-  return <article className={`mdm-section-card overflow-hidden rounded-xl border ${selected ? "border-primary/60 bg-primary/5" : "border-border bg-card/70"}`}>
+function LibraryCard({ item, selected, focused, onSelect, onApply, onDelete }: { item: LibraryItem; selected: boolean; focused?: boolean; onSelect: () => void; onApply: () => void; onDelete: () => void }) {
+  return <article id={`mdm-library-${item.id}`} aria-current={focused ? "true" : undefined} className={`mdm-section-card overflow-hidden rounded-xl border ${focused ? "border-primary ring-2 ring-primary/35" : selected ? "border-primary/60 bg-primary/5" : "border-border bg-card/70"}`}>
     {item.imageUrl ? <img src={item.imageUrl} alt={item.name} referrerPolicy="no-referrer" className="h-40 w-full object-cover" /> : <div className="flex h-28 items-center justify-center bg-background text-muted-foreground/70"><ImageIcon className="h-8 w-8" /></div>}
     <div className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] uppercase tracking-wide text-primary">{item.type}</p><h3 className="font-semibold text-foreground">{item.name}</h3></div><label className="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" checked={selected} onChange={onSelect} />Pacote</label></div><p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{item.description}</p><div className="mt-4 flex gap-2"><button onClick={onApply} className="primary-button flex-1"><Archive className="h-4 w-4" />Usar na mesa</button><button onClick={onDelete} className="icon-button text-destructive"><Trash2 className="h-4 w-4" /></button></div></div>
   </article>;
