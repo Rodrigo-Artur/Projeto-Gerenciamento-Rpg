@@ -139,7 +139,7 @@ export function useWorkspaceApi(playerView = false) {
     await action({ action: "record-recent", tableId: data.activeTableId, contentType: type, contentId: id, contentName: name }, { silent: true });
   }, [action, data.activeTableId]);
 
-  const statusKind: WorkspaceStatusKind = loadError || saveError ? "error"
+  const statusKind: WorkspaceStatusKind = loadError || saveError || /^falha ao /i.test(status) ? "error"
     : loading ? "loading" : pendingSaves > 0 ? "saving" : "saved";
 
   return {
