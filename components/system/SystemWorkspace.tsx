@@ -72,6 +72,7 @@ export function SystemWorkspace() {
   const [tabs, setTabs] = useState<WorkspaceTab[]>([]);
   const [tabsOwner, setTabsOwner] = useState("");
   const [navigationNotice, setNavigationNotice] = useState("");
+  const [pendingOpened, setPendingOpened] = useState<{ tableId: string; type: string; id: string; name: string }>();
   const [activeTabId, setActiveTabId] = useState("");
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -133,6 +134,21 @@ export function SystemWorkspace() {
       JSON.stringify({ version: 2, tabs, activeTabId: validIds.has(activeTabId) ? activeTabId : tabs[0]?.id ?? "" })
     );
   }, [data.activeTableId, loading, tabs, tabsOwner, activeTabId]);
+
+  // O editor pode concluir uma criação antes de React aplicar a resposta
+  // de POST. Só abrir a nova aba quando o registro existir no payload da mesa.
+  useEffect(() => {
+    if (!pendingOpened || loading) return;
+    if (pendingOpened.tableId !== data.activeTableId) {
+      setPendingOpened(undefined);
+      return;
+    }
+    const resolved = resolveWorkspaceContent(data, pendingOpened.type, pendingOpened.id);
+    if (!resolved) return;
+    setPendingOpened(undefined);
+    addTab(resolved.type, resolved.refId, resolved.title);
+    void recordRecent(resolved.type, resolved.refId, resolved.title);
+  }, [data, loading, pendingOpened, recordRecent]);
 
   useEffect(() => {
     if (!effectiveEdit || editTimeoutMinutes === 0) return;
@@ -222,6 +238,7 @@ export function SystemWorkspace() {
     setEditMode(false);
     setItemEditMode(false);
     setNavigationNotice("");
+    setPendingOpened(undefined);
     setView("home");
     void load(tableId);
   }
@@ -266,27 +283,15 @@ export function SystemWorkspace() {
   }
 
   function opened(type: string, id: string, name: string) {
-    // Conteúdos recém-criados podem chegar neste callback antes que o React
-    // aplique a resposta da ação. O item vem do editor da mesa atual; permite
-    // uma aba temporária que será validada no próximo payload do servidor.
     const resolved = resolveWorkspaceContent(data, type, id);
     if (resolved) {
       addTab(resolved.type, resolved.refId, resolved.title);
       void recordRecent(resolved.type, resolved.refId, resolved.title);
       return;
     }
-    const supported = new Set(["rule", "npc", "player", "note", "session", "item", "location", "faction", "quest", "timeline", "entity"]);
-    if (loading || !supported.has(type) || !id) return;
-    const view: ViewId = type === "rule" ? "rules" : type === "npc" || type === "player" ? "sheets" : type === "session" || type === "note" ? "sessions" : "world";
-    const tab = createWorkspaceTab(data.activeTableId, { type, refId: id, title: name, view });
-    setTabs((current) => {
-      const previous = tabsOwner === data.activeTableId ? current : [];
-      return [...previous.filter((item) => item.id !== tab.id), tab].slice(-12);
-    });
-    setTabsOwner(data.activeTableId);
-    setActiveTabId(tab.id);
-    setItemEditMode(false);
-    void recordRecent(type, id, name);
+    // Registros criados via autosave/POST podem ainda não existir no snapshot
+    // capturado pelo editor. Aguarda o payload novo, sem inventar uma referência.
+    setPendingOpened({ tableId: data.activeTableId, type, id, name });
   }
 
   function openTab(tab: WorkspaceTab) {
