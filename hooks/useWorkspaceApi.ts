@@ -6,6 +6,11 @@ import type { ImportPreview, RulebookData } from "@/types/rulebook";
 
 export type RecentContent = { type: string; id: string; name: string; openedAt: string };
 export type SearchResult = { type: string; id: string; name: string; description: string };
+export type WorkspaceStatusKind = "loading" | "saving" | "saved" | "error";
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
 type WorkspaceResponse = RulebookData & { recent?: RecentContent[]; error?: string; summary?: string; undo?: boolean; undoLabel?: string };
 
 const emptyData: RulebookData = {
@@ -31,6 +36,10 @@ export function useWorkspaceApi(playerView = false) {
   const [recent, setRecent] = useState<RecentContent[]>([]);
   const [status, setStatus] = useState("Carregando...");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState<string>();
   const loadGeneration = useRef(0);
   const appliedTableId = useRef<string | undefined>(undefined);
 
@@ -47,6 +56,7 @@ export function useWorkspaceApi(playerView = false) {
     // Uma resposta atrasada não pode trocar a mesa que o usuário já selecionou.
     const generation = ++loadGeneration.current;
     setLoading(true);
+    setLoadError(null);
     setStatus("Carregando mesa...");
     try {
       const params = new URLSearchParams();
@@ -57,10 +67,13 @@ export function useWorkspaceApi(playerView = false) {
       if (!response.ok) throw new Error(json.error || "Falha ao carregar.");
       if (generation !== loadGeneration.current) return;
       applyResponse(json, true);
+      setLoadError(null);
       setStatus("Salvo");
     } catch (error) {
       if (generation === loadGeneration.current) {
-        setStatus(error instanceof Error ? error.message : "Erro ao carregar");
+        const message = errorMessage(error, "Não foi possível carregar esta mesa.");
+        setLoadError(message);
+        setStatus("Falha ao carregar");
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -74,7 +87,10 @@ export function useWorkspaceApi(playerView = false) {
 
   const action = useCallback(async <T extends Record<string, unknown>>(payload: T, options?: { reloadTableId?: string; silent?: boolean }) => {
     const generation = loadGeneration.current;
-    if (!options?.silent) setStatus("Salvando...");
+    if (!options?.silent) {
+      setPendingSaves((count) => count + 1);
+      setStatus("Salvando...");
+    }
     try {
       const response = await fetch("/api/rulebook", {
         method: "POST",
@@ -85,13 +101,20 @@ export function useWorkspaceApi(playerView = false) {
       if (!response.ok) throw new Error(json.error || "Falha ao salvar.");
       if (json.tables && generation === loadGeneration.current) applyResponse(json);
       if (options?.reloadTableId) await load(options.reloadTableId);
-      if (!options?.silent && generation === loadGeneration.current) setStatus("Salvo");
+      if (!options?.silent && generation === loadGeneration.current) {
+        setSaveError(null);
+        setLastSavedAt(new Date().toISOString());
+        setStatus("Salvo");
+      }
       return json;
     } catch (error) {
       if (!options?.silent && generation === loadGeneration.current) {
-        setStatus(error instanceof Error ? error.message : "Erro ao salvar.");
+        setSaveError(errorMessage(error, "Não foi possível salvar. Verifique os dados antes de tentar novamente."));
+        setStatus("Falha ao salvar");
       }
       throw error;
+    } finally {
+      if (!options?.silent) setPendingSaves((count) => Math.max(0, count - 1));
     }
   }, [applyResponse, load]);
 
@@ -116,5 +139,12 @@ export function useWorkspaceApi(playerView = false) {
     await action({ action: "record-recent", tableId: data.activeTableId, contentType: type, contentId: id, contentName: name }, { silent: true });
   }, [action, data.activeTableId]);
 
-  return { data, recent, status, loading, setData, load, action, search, previewImport, recordRecent };
+  const statusKind: WorkspaceStatusKind = loadError || saveError ? "error"
+    : loading ? "loading" : pendingSaves > 0 ? "saving" : "saved";
+
+  return {
+    data, recent, status, statusKind, loading, loadError, saveError, lastSavedAt,
+    clearSaveError: () => setSaveError(null),
+    setData, load, action, search, previewImport, recordRecent,
+  };
 }
