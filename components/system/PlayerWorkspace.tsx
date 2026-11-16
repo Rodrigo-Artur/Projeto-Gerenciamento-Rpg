@@ -6,7 +6,7 @@ import { useWorkspaceApi } from "@/hooks/useWorkspaceApi";
 export function PlayerWorkspace() {
   const { data, loading } = useWorkspaceApi(true);
   if (loading) {
-    return <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-sm text-zinc-500">Carregando tela dos jogadores...</main>;
+    return <main className="mdm-module flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Carregando tela dos jogadores...</main>;
   }
   return <PlayerView data={data} />;
 }
