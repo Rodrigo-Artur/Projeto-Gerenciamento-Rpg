@@ -211,7 +211,9 @@ export function SystemWorkspace() {
   }
 
   function switchTable(tableId: string) {
-    if (!tableId || tableId === data.activeTableId) return;
+    // Mesmo que a mesa atual ainda apareça selecionada enquanto outra carrega,
+    // permitir a troca para ela novamente: isso invalida a resposta pendente.
+    if (!tableId || (tableId === data.activeTableId && !loading)) return;
     // Mesa diferente: pesquisa, permissões temporárias e foco anterior são descartados.
     setSearchQuery("");
     setSearchResults([]);
