@@ -37,6 +37,7 @@ export function LibraryView({ data, action, focusId }: { data: RulebookData; act
 
   useEffect(() => {
     if (!focusId) return;
+    setQuery("");
     document.getElementById(`mdm-library-${focusId}`)?.scrollIntoView({ block: "center", behavior: "instant" });
   }, [focusId, data.activeTableId]);
 
