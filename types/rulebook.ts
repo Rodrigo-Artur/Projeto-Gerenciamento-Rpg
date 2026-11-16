@@ -373,6 +373,7 @@ export type WorkspaceRuntime = {
 
 export type WorkspaceTab = {
   id: string;
+  tableId?: string; // v2: scoped to a specific table; legacy tabs are validated on restore
   type: string;
   refId?: string;
   title: string;

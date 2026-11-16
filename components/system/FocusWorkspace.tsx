@@ -10,7 +10,11 @@ export function FocusWorkspace() {
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const type = params.get("type") ?? "";
   const id = params.get("id") ?? "";
+  const requestedTableId = params.get("tableId") ?? "";
   if (loading) return <main className="mdm-module flex min-h-screen items-center justify-center bg-background text-muted-foreground">Carregando painel...</main>;
+  if (requestedTableId && requestedTableId !== data.activeTableId) {
+    return <main role="alert" className="flex min-h-screen items-center justify-center bg-background p-6 text-muted-foreground">A mesa solicitada não foi encontrada. Volte à tela principal e abra o conteúdo novamente.</main>;
+  }
   const item = resolveItem(data, type, id);
   if (!item) return <main className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Conteúdo não encontrado.</main>;
 
@@ -30,8 +34,8 @@ function resolveItem(data: RulebookData, type: string, id: string) {
     const item = data.rules.find((entry) => entry.id === id); if (!item) return undefined;
     return { title: item.title, subtitle: item.category, imageUrl: item.meta?.imageUrl, sections: [{ title: "Resumo", lines: [item.summary] }, { title: "Regra", lines: [item.content] }, { title: "Tags", lines: item.tags }] };
   }
-  if (type === "entity") {
-    const item = data.entities?.find((entry) => entry.id === id); if (!item) return undefined;
+  if (["entity", "item", "location", "faction", "quest", "timeline", "calendar-event"].includes(type)) {
+    const item = data.entities?.find((entry) => entry.id === id && (type === "entity" || entry.type === type)); if (!item) return undefined;
     const imageUrl = typeof item.data?.imageUrl === "string" ? item.data.imageUrl : undefined;
     return { title: item.name, subtitle: item.type, imageUrl, sections: [{ title: "Resumo", lines: [item.summary] }, { title: "Conteúdo", lines: [item.content] }, { title: "Tags", lines: item.tags }] };
   }
@@ -47,5 +51,9 @@ function resolveItem(data: RulebookData, type: string, id: string) {
     const item = data.handouts?.find((entry) => entry.id === id); if (!item) return undefined;
     return { title: item.title, subtitle: item.visibility === "players" ? "Revelado" : "Mestre", imageUrl: item.imageUrl, sections: [{ title: "Conteúdo", lines: [item.content] }] };
   }
-  return { title: "Conteúdo", subtitle: type, sections: [{ title: "Dados", lines: ["Este tipo de conteúdo não possui visualizador especializado."] }], imageUrl: undefined };
+  if (type === "library") {
+    const item = data.library?.find((entry) => entry.id === id); if (!item) return undefined;
+    return { title: item.name, subtitle: item.type, imageUrl: item.imageUrl, sections: [{ title: "Descrição", lines: [item.description] }, { title: "Tags", lines: item.tags }] };
+  }
+  return undefined;
 }

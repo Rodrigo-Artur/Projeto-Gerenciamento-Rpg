@@ -1,7 +1,7 @@
 "use client";
 
 import { CopyPlus, Eye, EyeOff, Image as ImageIcon, Plus, Save, Sparkles, Star, Trash2, UserRound, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useDebouncedAutosave, type AutosaveState } from "@/hooks/useDebouncedAutosave";
 import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
@@ -19,9 +19,27 @@ function initialAttributes(data: RulebookData) { return (data.systemConfig?.attr
 function initialResources(data: RulebookData) { return (data.systemConfig?.resources ?? []).map((label) => ({ label, value: "0" })); }
 function typedConfirm(name: string, verb = "excluir") { return prompt(`Para ${verb} “${name}”, digite exatamente o nome:`, "") === name; }
 
-export function SheetsView({ data, action, onOpened }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void }) {
-  const [kind, setKind] = useState<"players" | "npcs">("players");
-  const [selectedId, setSelectedId] = useState(data.players[0]?.id ?? data.npcs[0]?.id ?? "");
+export function SheetsView({
+  data, action, onOpened, focusType, focusId,
+}: {
+  data: RulebookData;
+  action: (payload: Record<string, unknown>) => Promise<unknown>;
+  onOpened: (type: string, id: string, name: string) => void;
+  focusType?: "player" | "npc";
+  focusId?: string;
+}) {
+  const focusedPlayer = focusType === "player" ? data.players.find((item) => item.id === focusId) : undefined;
+  const focusedNpc = focusType === "npc" ? data.npcs.find((item) => item.id === focusId) : undefined;
+  const initialKind = focusedNpc || (!focusedPlayer && data.players.length === 0 && data.npcs.length > 0) ? "npcs" : "players";
+  const [kind, setKind] = useState<"players" | "npcs">(initialKind);
+  const [selectedId, setSelectedId] = useState(focusedPlayer?.id ?? focusedNpc?.id ?? (initialKind === "players" ? data.players[0]?.id : data.npcs[0]?.id) ?? "");
+  const selectedFocus = focusedPlayer?.id ?? focusedNpc?.id;
+  useEffect(() => {
+    if (selectedFocus) {
+      setKind(focusedNpc ? "npcs" : "players");
+      setSelectedId(selectedFocus);
+    }
+  }, [selectedFocus, focusedNpc]);
   const [query, setQuery] = useState("");
   const players = useMemo(() => data.players.filter((item) => !query || `${item.characterName} ${item.playerName} ${item.role}`.toLowerCase().includes(query.toLowerCase())), [data.players, query]);
   const npcs = useMemo(() => data.npcs.filter((item) => !query || `${item.name} ${item.role} ${item.category}`.toLowerCase().includes(query.toLowerCase())), [data.npcs, query]);
@@ -68,7 +86,7 @@ export function SheetsView({ data, action, onOpened }: { data: RulebookData; act
 
   return <div className="mdm-module workspace-list-detail workspace-list-detail--330 grid h-full min-h-0 overflow-hidden">
     <aside className="mdm-list-pane mdm-scroll-area overflow-y-auto border-r border-border bg-card/60 p-4">
-      <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-1"><button onClick={() => setKind("players")} className={`rounded-md px-3 py-2 text-sm ${kind === "players" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><UserRound className="mr-2 inline h-4 w-4" />Players</button><button onClick={() => setKind("npcs")} className={`rounded-md px-3 py-2 text-sm ${kind === "npcs" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><Users className="mr-2 inline h-4 w-4" />NPCs</button></div>
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-1"><button onClick={() => { setKind("players"); const first = data.players[0]; if (first) selectPlayer(first); else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${kind === "players" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><UserRound className="mr-2 inline h-4 w-4" />Players</button><button onClick={() => { setKind("npcs"); const first = data.npcs[0]; if (first) selectNpc(first); else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${kind === "npcs" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><Users className="mr-2 inline h-4 w-4" />NPCs</button></div>
       <input value={query} onChange={(event) => setQuery(event.target.value)} className="field mt-3" placeholder="Filtrar fichas" />
       <div className="mt-3 rounded-lg border border-border bg-background p-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Criar usando template</p><div className="mt-2 space-y-2">{kind === "players" ? <><button onClick={() => void createPlayer()} className="secondary-button w-full"><Plus className="h-3.5 w-3.5" />Player vazio</button>{playerTemplates.map((template) => <button key={template.id} onClick={() => void createPlayer(template.id)} className="secondary-button w-full">{template.name}</button>)}</> : <><button onClick={() => void createNpc()} className="secondary-button w-full"><Plus className="h-3.5 w-3.5" />NPC vazio</button><button onClick={() => void generateNpc()} className="secondary-button w-full"><Sparkles className="h-3.5 w-3.5" />Gerar NPC rápido</button>{selectedNpc && <button onClick={() => void duplicateNpc()} className="secondary-button w-full"><CopyPlus className="h-3.5 w-3.5" />Duplicar selecionado</button>}{npcTemplates.map((template) => <button key={template.id} onClick={() => void createNpc(template.id)} className="secondary-button w-full">{template.name}</button>)}</>}</div></div>
       <div className="mt-4 space-y-2">{kind === "players" ? players.map((item) => <SheetButton key={item.id} active={selectedId === item.id} favorite={Boolean(item.meta?.favorite)} imageUrl={item.meta?.imageUrl} title={item.characterName} subtitle={`${item.playerName} • ${item.role}`} onClick={() => selectPlayer(item)} />) : npcs.map((item) => <SheetButton key={item.id} active={selectedId === item.id} favorite={Boolean(item.meta?.favorite)} imageUrl={item.meta?.imageUrl} title={item.name} subtitle={`${item.category} • ${item.role}`} onClick={() => selectNpc(item)} />)}</div>

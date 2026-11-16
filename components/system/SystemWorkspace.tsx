@@ -32,7 +32,8 @@ import { SheetsView } from "@/components/system/SheetsView";
 import { TemplatesView } from "@/components/system/TemplatesView";
 import { WorldView } from "@/components/system/WorldView";
 import { useWorkspaceApi, type RecentContent, type SearchResult } from "@/hooks/useWorkspaceApi";
-import type { RulebookData, WorkspaceTab } from "@/types/rulebook";
+import type { WorkspaceTab } from "@/types/rulebook";
+import { createWorkspaceTab, readWorkspaceTabs, resolveWorkspaceContent, validateWorkspaceTabs } from "@/lib/workspace-navigation";
 
 // Garante a mesma árvore no SSR e no primeiro render de hidratação.
 // O workspace completo depende de estado do navegador e da seleção de mesa.
@@ -47,27 +48,6 @@ function protectedFieldFromTarget(target: EventTarget | null) {
   if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return null;
   if (field instanceof HTMLInputElement && (field.placeholder.toLowerCase().includes("filtrar") || field.placeholder.toLowerCase().includes("buscar") || field.placeholder.toLowerCase().includes("pesquisar"))) return null;
   return field;
-}
-
-function viewForType(type: string): ViewId {
-  if (type === "rule") return "rules";
-  if (type === "player" || type === "npc") return "sheets";
-  if (type === "note" || type === "session" || type === "handout") return "sessions";
-  if (["item", "location", "faction", "quest", "timeline", "entity"].includes(type)) return "world";
-  return "home";
-}
-
-function dataWithFocusedSheet(data: RulebookData, tab?: WorkspaceTab): RulebookData {
-  if (!tab?.refId) return data;
-  if (tab.type === "player") {
-    const selected = data.players.find((item) => item.id === tab.refId);
-    if (selected) return { ...data, players: [selected, ...data.players.filter((item) => item.id !== selected.id)] };
-  }
-  if (tab.type === "npc") {
-    const selected = data.npcs.find((item) => item.id === tab.refId);
-    if (selected) return { ...data, npcs: [selected, ...data.npcs.filter((item) => item.id !== selected.id)] };
-  }
-  return data;
 }
 
 export function SystemWorkspace() {
@@ -90,14 +70,17 @@ export function SystemWorkspace() {
   const [editTimeoutMinutes, setEditTimeoutMinutes] = useState(5);
   const [editActivity, setEditActivity] = useState(0);
   const [tabs, setTabs] = useState<WorkspaceTab[]>([]);
+  const [tabsOwner, setTabsOwner] = useState("");
+  const [navigationNotice, setNavigationNotice] = useState("");
+  const [pendingOpened, setPendingOpened] = useState<{ tableId: string; type: string; id: string; name: string }>();
   const [activeTabId, setActiveTabId] = useState("");
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const currentTable = data.tables.find((item) => item.id === data.activeTableId);
   const currentSystem = data.systems.find((item) => item.id === data.activeSystemId) ?? data.systems.find((item) => item.id === currentTable?.systemId);
-  const activeTab = useMemo(() => tabs.find((item) => item.id === activeTabId), [activeTabId, tabs]);
+  const visibleTabs = tabsOwner === data.activeTableId ? tabs : [];
+  const activeTab = visibleTabs.find((item) => item.id === activeTabId);
   const activeEditableTab = activeTab?.view === view ? activeTab : undefined;
-  const sheetData = useMemo(() => dataWithFocusedSheet(data, activeEditableTab), [activeEditableTab, data]);
   const paletteFavorites = useMemo(() => homeFavorites(data), [data]);
   const effectiveEdit = editMode || itemEditMode;
 
@@ -111,23 +94,61 @@ export function SystemWorkspace() {
     return () => document.removeEventListener("fullscreenchange", onFullscreen);
   }, []);
 
+  // Restaurar somente depois da resposta da mesa; validar refs antes de exibir.
+  // A escrita é autorizada apenas se tabsOwner pertencer à mesa carregada,
+  // evitando que abas antigas sobrescrevam a configuração de outra mesa.
   useEffect(() => {
-    if (!data.activeTableId) return;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(`mesa-tabs-${data.activeTableId}`) ?? "[]") as WorkspaceTab[];
-      setTabs(Array.isArray(saved) ? saved.slice(0, 12) : []);
-      setActiveTabId(saved[0]?.id ?? "");
-    } catch {
-      setTabs([]);
-      setActiveTabId("");
+    if (loading || !data.tables.some((item) => item.id === data.activeTableId)) return;
+    if (tabsOwner !== data.activeTableId) {
+      const restored = readWorkspaceTabs(
+        data, window.localStorage.getItem(`mesa-tabs-${data.activeTableId}`)
+      );
+      setTabs(restored.tabs);
+      setActiveTabId(restored.activeTabId);
+      setTabsOwner(data.activeTableId);
+      setItemEditMode(false);
+      return;
     }
-    setItemEditMode(false);
-  }, [data.activeTableId]);
+    setTabs((current) => {
+      const cleaned = validateWorkspaceTabs(data, current);
+      const unchanged = cleaned.length === current.length && cleaned.every(
+        (item, index) =>
+          item.id === current[index]?.id &&
+          item.title === current[index]?.title &&
+          item.view === current[index]?.view &&
+          item.pinned === current[index]?.pinned
+      );
+      return unchanged ? current : cleaned;
+    });
+  }, [data, loading, tabsOwner]);
 
   useEffect(() => {
-    if (!data.activeTableId) return;
-    window.localStorage.setItem(`mesa-tabs-${data.activeTableId}`, JSON.stringify(tabs));
-  }, [data.activeTableId, tabs]);
+    if (tabsOwner !== data.activeTableId || loading) return;
+    const validIds = new Set(tabs.map((item) => item.id));
+    if (activeTabId && !validIds.has(activeTabId)) {
+      setActiveTabId(tabs[0]?.id ?? "");
+      setItemEditMode(false);
+    }
+    window.localStorage.setItem(
+      `mesa-tabs-${tabsOwner}`,
+      JSON.stringify({ version: 2, tabs, activeTabId: validIds.has(activeTabId) ? activeTabId : tabs[0]?.id ?? "" })
+    );
+  }, [data.activeTableId, loading, tabs, tabsOwner, activeTabId]);
+
+  // O editor pode concluir uma criação antes de React aplicar a resposta
+  // de POST. Só abrir a nova aba quando o registro existir no payload da mesa.
+  useEffect(() => {
+    if (!pendingOpened || loading) return;
+    if (pendingOpened.tableId !== data.activeTableId) {
+      setPendingOpened(undefined);
+      return;
+    }
+    const resolved = resolveWorkspaceContent(data, pendingOpened.type, pendingOpened.id);
+    if (!resolved) return;
+    setPendingOpened(undefined);
+    addTab(resolved.type, resolved.refId, resolved.title);
+    void recordRecent(resolved.type, resolved.refId, resolved.title);
+  }, [data, loading, pendingOpened, recordRecent]);
 
   useEffect(() => {
     if (!effectiveEdit || editTimeoutMinutes === 0) return;
@@ -206,7 +227,9 @@ export function SystemWorkspace() {
   }
 
   function switchTable(tableId: string) {
-    if (!tableId || tableId === data.activeTableId) return;
+    // Mesmo que a mesa atual ainda apareça selecionada enquanto outra carrega,
+    // permitir a troca para ela novamente: isso invalida a resposta pendente.
+    if (!tableId || (tableId === data.activeTableId && !loading)) return;
     // Mesa diferente: pesquisa, permissões temporárias e foco anterior são descartados.
     setSearchQuery("");
     setSearchResults([]);
@@ -214,21 +237,39 @@ export function SystemWorkspace() {
     setSearchOpen(false);
     setEditMode(false);
     setItemEditMode(false);
-    setActiveTabId("");
+    setNavigationNotice("");
+    setPendingOpened(undefined);
+    setView("home");
     void load(tableId);
   }
 
   function addTab(type: string, id: string, name: string) {
-    const tab: WorkspaceTab = { id: `${type}:${id}`, type, refId: id, title: name, view: viewForType(type) };
-    setTabs((current) => current.some((item) => item.id === tab.id) ? current : [...current, tab].slice(-12));
+    const content = resolveWorkspaceContent(data, type, id);
+    if (!content || loading) {
+      setNavigationNotice(`Não foi possível abrir “${name}”: conteúdo não encontrado na mesa atual.`);
+      return;
+    }
+    const tab = createWorkspaceTab(data.activeTableId, content);
+    setNavigationNotice("");
+    setTabs((current) => {
+      const existing = tabsOwner === data.activeTableId ? current : [];
+      if (existing.some((item) => item.id === tab.id)) return existing;
+      return [...existing, tab].slice(-12);
+    });
+    setTabsOwner(data.activeTableId);
     setActiveTabId(tab.id);
     setItemEditMode(false);
   }
 
   function openContent(type: string, id: string, name: string) {
-    setView(viewForType(type));
-    addTab(type, id, name);
-    void recordRecent(type, id, name);
+    const content = resolveWorkspaceContent(data, type, id);
+    if (!content || loading) {
+      setNavigationNotice(`O conteúdo “${name}” não existe mais nesta mesa.`);
+      return;
+    }
+    setView(content.view);
+    addTab(content.type, content.refId, content.title);
+    void recordRecent(content.type, content.refId, content.title);
   }
 
   function openSearchResult(result: SearchResult) {
@@ -242,22 +283,40 @@ export function SystemWorkspace() {
   }
 
   function opened(type: string, id: string, name: string) {
-    addTab(type, id, name);
-    void recordRecent(type, id, name);
+    const resolved = resolveWorkspaceContent(data, type, id);
+    if (resolved) {
+      addTab(resolved.type, resolved.refId, resolved.title);
+      void recordRecent(resolved.type, resolved.refId, resolved.title);
+      return;
+    }
+    // Registros criados via autosave/POST podem ainda não existir no snapshot
+    // capturado pelo editor. Aguarda o payload novo, sem inventar uma referência.
+    setPendingOpened({ tableId: data.activeTableId, type, id, name });
   }
 
   function openTab(tab: WorkspaceTab) {
+    if (tabsOwner !== data.activeTableId || tab.tableId !== data.activeTableId) return;
+    const content = resolveWorkspaceContent(data, tab.type, tab.refId ?? "");
+    if (!content) {
+      setNavigationNotice(`A aba “${tab.title}” não existe mais nesta mesa.`);
+      setTabs((current) => current.filter((item) => item.id !== tab.id));
+      return;
+    }
+    setNavigationNotice("");
     setActiveTabId(tab.id);
-    setView(tab.view as ViewId);
+    setView(content.view);
     setItemEditMode(false);
-    void recordRecent(tab.type, tab.refId ?? tab.id, tab.title);
+    void recordRecent(content.type, content.refId, content.title);
   }
 
   function closeTab(id: string) {
+    if (tabsOwner !== data.activeTableId) return;
     const remaining = tabs.filter((item) => item.id !== id);
     setTabs(remaining);
     if (activeTabId === id) {
-      setActiveTabId(remaining.at(-1)?.id ?? "");
+      const next = remaining.at(-1);
+      setActiveTabId(next?.id ?? "");
+      if (next) setView(next.view as ViewId);
       setItemEditMode(false);
     }
   }
@@ -438,9 +497,11 @@ export function SystemWorkspace() {
       editTimeoutMinutes={editTimeoutMinutes}
       compact={compact}
     />}
-    tabStrip={tabs.length > 0 ? (
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 bg-card/60 px-3 py-2 lg:px-5" aria-label="Conteúdos abertos">
-        {tabs.map((tab) => (
+    tabStrip={navigationNotice || (!loading && visibleTabs.length > 0) ? (
+      <div className="border-b border-border/60 bg-card/60">
+        {navigationNotice && <p role="alert" className="px-4 py-2 text-xs text-warning">{navigationNotice}</p>}
+        {visibleTabs.length > 0 && <div className="flex gap-1 overflow-x-auto px-3 py-2 lg:px-5" aria-label="Conteúdos abertos">
+        {visibleTabs.map((tab) => (
           <div key={tab.id} className={`flex shrink-0 items-center rounded-lg border ${activeTabId === tab.id ? "border-primary/45 bg-primary/10" : "border-border bg-secondary/60"}`}>
             <button
               type="button"
@@ -453,21 +514,22 @@ export function SystemWorkspace() {
             <button type="button" aria-label={`Fechar ${tab.title}`} onClick={() => closeTab(tab.id)} className="rounded-md py-1.5 pl-1.5 pr-2 text-muted-foreground hover:text-destructive focus-visible:outline-2 focus-visible:outline-ring"><X aria-hidden="true" className="size-3.5" /></button>
           </div>
         ))}
+        </div>}
       </div>
     ) : undefined}
   >
     <section className={`workspace-content min-h-0 flex-1 overflow-hidden ${editMode ? "workspace-editing" : itemEditMode ? "workspace-readonly workspace-item-edit" : "workspace-readonly"}`} onBeforeInputCapture={protectReadModeFormEvent} onPasteCapture={protectReadModeClipboard} onCutCapture={protectReadModeClipboard} onKeyDownCapture={protectReadModeKeyDown} onInputCapture={touchEdit} onPointerDownCapture={touchEdit}>
       {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} loading={loading} onContinue={() => setView("session-mode")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={switchTable} onOpenRecent={openRecent} onOpenContent={openContent} onNavigate={(nextView) => { setView(nextView); setItemEditMode(false); }} /></div>}
-      {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} /></div>}
-      {view === "dashboard" && <div className={`${contentHeight} overflow-y-auto`}><DashboardView data={data} recent={recent} action={runAction} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
+      {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} focusHandoutId={activeEditableTab?.type === "handout" ? focusId : undefined} /></div>}
+      {view === "dashboard" && <div className={`${contentHeight} overflow-y-auto`}><DashboardView data={data} recent={recent} action={runAction} onOpenTable={switchTable} onOpenRecent={openRecent} /></div>}
       {view === "rules" && <div className={contentHeight}><RulesView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab?.type === "rule" ? focusId : undefined} /></div>}
-      {view === "sheets" && <div className={contentHeight}><SheetsView key={`sheets:${activeEditableTab?.id ?? "base"}`} data={sheetData} action={runAction} onOpened={opened} /></div>}
+      {view === "sheets" && <div className={contentHeight}><SheetsView key={`sheets:${data.activeTableId}:${activeEditableTab?.id ?? "base"}`} data={data} action={runAction} onOpened={opened} focusType={activeEditableTab?.type === "player" || activeEditableTab?.type === "npc" ? activeEditableTab.type : undefined} focusId={activeEditableTab?.type === "player" || activeEditableTab?.type === "npc" ? focusId : undefined} /></div>}
       {view === "templates" && <div className={contentHeight}><TemplatesView data={data} action={runAction} /></div>}
       {view === "world" && <div className={contentHeight}><WorldView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["item", "location", "faction", "quest", "timeline", "entity"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
       {view === "campaign" && <div className={contentHeight}><CampaignToolsView data={data} action={runAction} /></div>}
-      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
+      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} focusType={activeEditableTab?.type === "session" || activeEditableTab?.type === "note" ? activeEditableTab.type : undefined} /></div>}
       {view === "combat" && <div className={contentHeight}><CombatView data={data} action={runAction} /></div>}
-      {view === "library" && <div className={contentHeight}><LibraryView data={data} action={runAction} /></div>}
+      {view === "library" && <div className={contentHeight}><LibraryView data={data} action={runAction} focusId={activeEditableTab?.type === "library" ? focusId : undefined} /></div>}
       {view === "history" && <div className={`${contentHeight} overflow-y-auto`}><HistoryView data={data} action={runAction} /></div>}
     </section>
 

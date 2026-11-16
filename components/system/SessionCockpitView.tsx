@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, ClipboardList, Eye, EyeOff, FileText, Image as ImageIcon, Play, Plus, RotateCcw, Send, Square, Swords, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { Handout, RulebookData, SnapshotComparison } from "@/types/rulebook";
 
@@ -12,11 +12,13 @@ export function SessionCockpitView({
   action,
   onOpenCombat,
   onOpenContent,
+  focusHandoutId,
 }: {
   data: RulebookData;
   action: Action;
   onOpenCombat: () => void;
   onOpenContent: (type: string, id: string, name: string) => void;
+  focusHandoutId?: string;
 }) {
   const runtime = data.runtime;
   const [quickNotes, setQuickNotes] = useState((runtime?.quickNotes ?? []).join("\n"));
@@ -29,6 +31,11 @@ export function SessionCockpitView({
   const [handoutTitle, setHandoutTitle] = useState("");
   const [handoutContent, setHandoutContent] = useState("");
   const [handoutImage, setHandoutImage] = useState("");
+
+  useEffect(() => {
+    if (!focusHandoutId) return;
+    document.getElementById(`mdm-handout-${focusHandoutId}`)?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [focusHandoutId, data.activeTableId]);
 
   const activeSession = data.sessions.find((item) => item.id === runtime?.activeSessionId);
   const plannedSession = data.sessions.find((item) => item.status === "planned") ?? data.sessions[0];
@@ -119,13 +126,13 @@ export function SessionCockpitView({
         <section className="mdm-section-card rounded-xl border border-border bg-card/65 p-4">
           <div className="flex items-center justify-between"><div><p className="font-semibold text-foreground">Handouts e imagens</p><p className="text-xs text-muted-foreground">Use URLs externas diretas, inclusive imagens hospedadas no Imgur.</p></div><ImageIcon className="h-5 w-5 text-primary" /></div>
           <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.2fr_1.2fr_auto]"><input value={handoutTitle} onChange={(event) => setHandoutTitle(event.target.value)} className="field" placeholder="Título" /><input value={handoutImage} onChange={(event) => setHandoutImage(event.target.value)} className="field" placeholder="https://i.imgur.com/imagem.png" /><input value={handoutContent} onChange={(event) => setHandoutContent(event.target.value)} className="field" placeholder="Texto opcional" /><button onClick={() => void createHandout()} className="primary-button"><Plus className="h-4 w-4" />Criar</button></div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{(data.handouts ?? []).map((handout) => <HandoutCard key={handout.id} handout={handout} onToggle={() => void action({ action: "upsert-handout", tableId: data.activeTableId, item: { ...handout, visibility: handout.visibility === "players" ? "master" : "players" } })} onDelete={() => confirm(`Excluir o handout ${handout.title}?`) && void action({ action: "delete-handout", tableId: data.activeTableId, id: handout.id })} />)}</div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{(data.handouts ?? []).map((handout) => <HandoutCard key={handout.id} handout={handout} focused={focusHandoutId === handout.id} onToggle={() => void action({ action: "upsert-handout", tableId: data.activeTableId, item: { ...handout, visibility: handout.visibility === "players" ? "master" : "players" } })} onDelete={() => confirm(`Excluir o handout ${handout.title}?`) && void action({ action: "delete-handout", tableId: data.activeTableId, id: handout.id })} />)}</div>
         </section>
       </div>
     </div>
   );
 }
 
-function HandoutCard({ handout, onToggle, onDelete }: { handout: Handout; onToggle: () => void; onDelete: () => void }) {
-  return <article className="overflow-hidden rounded-xl border border-border bg-background">{handout.imageUrl ? <img src={handout.imageUrl} alt={handout.title} referrerPolicy="no-referrer" className="h-40 w-full object-cover" /> : <div className="flex h-24 items-center justify-center bg-card text-muted-foreground/70"><ImageIcon className="h-7 w-7" /></div>}<div className="p-3"><div className="flex items-start justify-between gap-2"><div><h4 className="font-medium text-foreground">{handout.title}</h4><p className="text-xs text-muted-foreground">{handout.visibility === "players" ? "Revelado aos jogadores" : "Somente mestre"}</p></div><button onClick={onToggle} className="icon-button">{handout.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button></div>{handout.content && <p className="mt-2 text-sm text-muted-foreground">{handout.content}</p>}<button onClick={onDelete} className="mt-3 inline-flex items-center gap-1 text-xs text-destructive"><Trash2 className="h-3.5 w-3.5" />Excluir</button></div></article>;
+function HandoutCard({ handout, focused, onToggle, onDelete }: { handout: Handout; focused?: boolean; onToggle: () => void; onDelete: () => void }) {
+  return <article id={`mdm-handout-${handout.id}`} aria-current={focused ? "true" : undefined} className={`overflow-hidden rounded-xl border bg-background ${focused ? "border-primary ring-2 ring-primary/35" : "border-border"}`}>{handout.imageUrl ? <img src={handout.imageUrl} alt={handout.title} referrerPolicy="no-referrer" className="h-40 w-full object-cover" /> : <div className="flex h-24 items-center justify-center bg-card text-muted-foreground/70"><ImageIcon className="h-7 w-7" /></div>}<div className="p-3"><div className="flex items-start justify-between gap-2"><div><h4 className="font-medium text-foreground">{handout.title}</h4><p className="text-xs text-muted-foreground">{handout.visibility === "players" ? "Revelado aos jogadores" : "Somente mestre"}</p></div><button onClick={onToggle} className="icon-button">{handout.visibility === "players" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button></div>{handout.content && <p className="mt-2 text-sm text-muted-foreground">{handout.content}</p>}<button onClick={onDelete} className="mt-3 inline-flex items-center gap-1 text-xs text-destructive"><Trash2 className="h-3.5 w-3.5" />Excluir</button></div></article>;
 }
