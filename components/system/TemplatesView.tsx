@@ -4,6 +4,7 @@ import { Plus, Settings2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { SystemConfigEditor } from "@/components/system/SystemConfigEditor";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import type { RulebookData, SheetCategory, SheetTemplate, TemplateField, TemplateFieldType } from "@/types/rulebook";
 
 const kinds: SheetTemplate["kind"][] = ["player", "npc", "boss", "monster", "companion", "custom"];
@@ -54,7 +55,7 @@ export function TemplatesView({ data, action }: { data: RulebookData; action: (p
       </aside>
       <section className="mdm-detail-pane mdm-scroll-area overflow-y-auto p-6">
         {selectedId === "__config__" ? <SystemConfigEditor key={data.activeSystemId} data={data} action={action} /> : null}
-        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : null}
+        {selected ? <TemplateEditor key={selected.id} item={selected} data={data} action={action} /> : selectedId !== "__config__" ? <WorkspaceEmpty kind="templates" title="Template não encontrado" description="Selecione outro modelo de ficha ou crie um novo." /> : null}
       </section>
     </div>
   );
