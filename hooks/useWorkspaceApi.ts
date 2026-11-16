@@ -32,7 +32,7 @@ export function useWorkspaceApi(playerView = false) {
   const [status, setStatus] = useState("Carregando...");
   const [loading, setLoading] = useState(true);
   const loadGeneration = useRef(0);
-  const appliedTableId = useRef<string>();
+  const appliedTableId = useRef<string | undefined>(undefined);
 
   const applyResponse = useCallback((response: WorkspaceResponse, clearRecents = false) => {
     // Ações de criação/duplicação de mesas podem trocar a mesa sem GET.
