@@ -4,6 +4,7 @@ import { Eye, EyeOff, Image as ImageIcon, Plus, Save, Star, Trash2 } from "lucid
 import { useEffect, useMemo, useState } from "react";
 
 import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
+import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import type { RuleArticle, RuleCategory, RulebookData } from "@/types/rulebook";
 
 const fallbackCategories: RuleCategory[] = ["combate", "testes", "atributos", "defesa-dano", "personagem", "progressao", "habilidades", "armaduras", "equipamentos", "npcs", "regras-da-casa"];
@@ -33,4 +34,4 @@ function RuleEditor({ rule, data, action }: { rule: RuleArticle; data: RulebookD
   </div>;
 }
 
-function Empty() { return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Crie ou selecione uma regra.</div>; }
+function Empty() { return <WorkspaceEmpty kind="rules" title="Nenhuma regra selecionada" description="Escolha uma regra na lista ou crie uma nova para começar." />; }
