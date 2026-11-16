@@ -52,7 +52,7 @@ function protectedFieldFromTarget(target: EventTarget | null) {
 }
 
 export function SystemWorkspace() {
-  const { data, recent, status, statusKind, loading, loadError, saveError, clearSaveError, load, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
+  const { data, recent, status, statusKind, loading, loadError, saveError, clearSaveError, load, retryLoad, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
   const clientReady = useClientReady();
   const [view, setView] = useState<ViewId>("home");
   const [importOpen, setImportOpen] = useState(false);
@@ -525,7 +525,7 @@ export function SystemWorkspace() {
         <WorkspaceLoadError
           compact
           message={loadError}
-          onRetry={() => void load(data.activeTableId)}
+          onRetry={() => void retryLoad()}
         />
       )}
       {saveError && <WorkspaceSaveError message={saveError} onDismiss={clearSaveError} />}
@@ -533,7 +533,7 @@ export function SystemWorkspace() {
       {loading ? (
         <WorkspaceLoading label="Carregando a mesa selecionada..." />
       ) : loadError && data.tables.length === 0 ? (
-        <WorkspaceLoadError message={loadError} onRetry={() => void load()} />
+        <WorkspaceLoadError message={loadError} onRetry={() => void retryLoad()} />
       ) : (
         <>
       {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} loading={loading} onContinue={() => setView("session-mode")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={switchTable} onOpenRecent={openRecent} onOpenContent={openContent} onNavigate={(nextView) => { setView(nextView); setItemEditMode(false); }} /></div>}
