@@ -66,11 +66,15 @@ export function Topbar({
           <label htmlFor="mdm-current-table" className="sr-only">Mesa ativa</label>
           <select
             id="mdm-current-table"
-            value={activeTableId}
-            disabled={tables.length === 0}
+            value={tables.some((table) => table.id === activeTableId) ? activeTableId : ""}
+            disabled={loading || tables.length === 0}
             onChange={(event) => onTableChange(event.target.value)}
+            aria-busy={loading}
             className="h-9 max-w-44 rounded-lg border border-border bg-secondary px-2.5 text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-56"
-          >{tables.map((table) => <option key={table.id} value={table.id}>{table.name}</option>)}</select>
+          >
+            {tables.length === 0 && <option value="">{loading ? "Carregando mesas..." : "Nenhuma mesa"}</option>}
+            {tables.map((table) => <option key={table.id} value={table.id}>{table.name}</option>)}
+          </select>
           <span className="hidden max-w-40 truncate text-xs text-muted-foreground xl:block" title={activeSystemName}>{activeSystemName}</span>
         </div>
 

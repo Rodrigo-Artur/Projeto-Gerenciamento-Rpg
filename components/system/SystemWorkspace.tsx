@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -31,6 +32,13 @@ import { TemplatesView } from "@/components/system/TemplatesView";
 import { WorldView } from "@/components/system/WorldView";
 import { useWorkspaceApi, type RecentContent, type SearchResult } from "@/hooks/useWorkspaceApi";
 import type { RulebookData, WorkspaceTab } from "@/types/rulebook";
+
+// Garante a mesma árvore no SSR e no primeiro render de hidratação.
+// O workspace completo depende de estado do navegador e da seleção de mesa.
+const subscribeToClientReady = () => () => {};
+function useClientReady() {
+  return useSyncExternalStore(subscribeToClientReady, () => true, () => false);
+}
 
 function protectedFieldFromTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return null;
@@ -63,6 +71,7 @@ function dataWithFocusedSheet(data: RulebookData, tab?: WorkspaceTab): RulebookD
 
 export function SystemWorkspace() {
   const { data, recent, status, loading, load, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
+  const clientReady = useClientReady();
   const [view, setView] = useState<ViewId>("home");
   const [importOpen, setImportOpen] = useState(false);
   const [dropFile, setDropFile] = useState<File>();
@@ -78,7 +87,7 @@ export function SystemWorkspace() {
   const [editMode, setEditMode] = useState(false);
   const [itemEditMode, setItemEditMode] = useState(false);
   const [editTimeoutMinutes, setEditTimeoutMinutes] = useState(5);
-  const [editActivity, setEditActivity] = useState(Date.now());
+  const [editActivity, setEditActivity] = useState(0);
   const [tabs, setTabs] = useState<WorkspaceTab[]>([]);
   const [activeTabId, setActiveTabId] = useState("");
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -338,6 +347,23 @@ export function SystemWorkspace() {
 
   const contentHeight = "h-full";
   const focusId = activeEditableTab?.refId;
+
+  // SSR e a primeira renderização no navegador exibem o mesmo fallback.
+  // Evita diferenças de atributos (ex.: select disabled) durante a hidratação.
+  if (!clientReady) {
+    return (
+      <main
+        role="status"
+        aria-live="polite"
+        className="flex min-h-dvh w-full items-center justify-center bg-background p-6 text-foreground"
+      >
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm text-muted-foreground">
+          <span aria-hidden="true" className="size-3 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+          Carregando Mesa do Mestre...
+        </div>
+      </main>
+    );
+  }
 
   return <AppShell
     compact={compact}
