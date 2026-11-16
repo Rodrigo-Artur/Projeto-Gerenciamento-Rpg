@@ -1,0 +1,97 @@
+/*
+ * Mesa do Mestre 5.0 · A4
+ * Padrões visuais compartilhados pelas seções, ainda compatíveis com
+ * os componentes e formulários existentes na v4.
+ */
+
+.mdm-module {
+  color: var(--mdm-text);
+  min-width: 0;
+  min-height: 0;
+}
+
+.mdm-module .mdm-list-pane {
+  background: linear-gradient(180deg, var(--mdm-surface) 0%, var(--mdm-canvas) 100%);
+  border-color: var(--mdm-border);
+  min-width: 0;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.mdm-module .mdm-detail-pane {
+  background: var(--mdm-canvas);
+  min-width: 0;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.mdm-module .mdm-editor {
+  width: 100%;
+  min-width: 0;
+}
+
+.mdm-module .mdm-section-card {
+  border-color: var(--mdm-border);
+  background: var(--mdm-surface);
+  border-radius: var(--mdm-radius-xl);
+  box-shadow: var(--mdm-shadow-panel);
+}
+
+.mdm-module .mdm-section-kicker {
+  color: var(--mdm-gold);
+  font-size: 0.72rem;
+  line-height: 1.2rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mdm-module .mdm-list-entry {
+  transition: background-color var(--mdm-duration-fast) ease,
+    border-color var(--mdm-duration-fast) ease,
+    box-shadow var(--mdm-duration-fast) ease;
+}
+
+.mdm-module .mdm-list-entry:hover:not(:disabled) {
+  border-color: var(--mdm-border-strong);
+  background-color: var(--mdm-surface-hover);
+}
+
+.mdm-module .mdm-list-entry:focus-visible {
+  outline: 2px solid var(--mdm-gold);
+  outline-offset: 2px;
+}
+
+.mdm-module .mdm-list-entry[aria-current="true"],
+.mdm-module .mdm-list-entry[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--mdm-gold) 65%, transparent);
+  background-color: color-mix(in srgb, var(--mdm-gold) 11%, var(--mdm-canvas));
+}
+
+.mdm-module .mdm-form-card {
+  border: 1px solid var(--mdm-border);
+  border-radius: var(--mdm-radius-xl);
+  background-color: var(--mdm-surface);
+  padding: var(--mdm-space-4);
+}
+
+.mdm-module :is(input, textarea, select, button):focus-visible {
+  outline-color: var(--mdm-gold);
+}
+
+.mdm-module .mdm-scroll-area {
+  scrollbar-color: var(--mdm-border-strong) var(--mdm-canvas);
+}
+
+@media (max-width: 767px) {
+  .mdm-module .mdm-list-pane {
+    padding: var(--mdm-space-3);
+  }
+  .mdm-module .mdm-detail-pane {
+    padding: var(--mdm-space-4);
+  }
+}
+
+/* Não modifica `workspace-readonly` / `workspace-item-edit`. São
+ * controles de segurança de edição e continuam no CSS legado.
+ */
