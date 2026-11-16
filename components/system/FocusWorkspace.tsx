@@ -30,8 +30,8 @@ function resolveItem(data: RulebookData, type: string, id: string) {
     const item = data.rules.find((entry) => entry.id === id); if (!item) return undefined;
     return { title: item.title, subtitle: item.category, imageUrl: item.meta?.imageUrl, sections: [{ title: "Resumo", lines: [item.summary] }, { title: "Regra", lines: [item.content] }, { title: "Tags", lines: item.tags }] };
   }
-  if (type === "entity") {
-    const item = data.entities?.find((entry) => entry.id === id); if (!item) return undefined;
+  if (["entity", "item", "location", "faction", "quest", "timeline", "calendar-event"].includes(type)) {
+    const item = data.entities?.find((entry) => entry.id === id && (type === "entity" || entry.type === type)); if (!item) return undefined;
     const imageUrl = typeof item.data?.imageUrl === "string" ? item.data.imageUrl : undefined;
     return { title: item.name, subtitle: item.type, imageUrl, sections: [{ title: "Resumo", lines: [item.summary] }, { title: "Conteúdo", lines: [item.content] }, { title: "Tags", lines: item.tags }] };
   }
@@ -47,5 +47,9 @@ function resolveItem(data: RulebookData, type: string, id: string) {
     const item = data.handouts?.find((entry) => entry.id === id); if (!item) return undefined;
     return { title: item.title, subtitle: item.visibility === "players" ? "Revelado" : "Mestre", imageUrl: item.imageUrl, sections: [{ title: "Conteúdo", lines: [item.content] }] };
   }
-  return { title: "Conteúdo", subtitle: type, sections: [{ title: "Dados", lines: ["Este tipo de conteúdo não possui visualizador especializado."] }], imageUrl: undefined };
+  if (type === "library") {
+    const item = data.library?.find((entry) => entry.id === id); if (!item) return undefined;
+    return { title: item.name, subtitle: item.type, imageUrl: item.imageUrl, sections: [{ title: "Descrição", lines: [item.description] }, { title: "Tags", lines: item.tags }] };
+  }
+  return undefined;
 }
