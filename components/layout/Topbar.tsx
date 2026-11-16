@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Database, Download, Eye, Maximize2, Menu, Minimize2,
+  AlertCircle, CheckCircle2, Download, Eye, LoaderCircle, Maximize2, Menu, Minimize2,
   Rows3, Undo2, Upload, Library, Settings2,
 } from "lucide-react";
 import type { RefObject } from "react";
@@ -11,7 +11,7 @@ import { EditModeSwitch } from "@/components/layout/EditModeSwitch";
 import { GlobalSearch, type PaletteCommand } from "@/components/layout/GlobalSearch";
 import { navigationGroups, type ViewId } from "@/components/layout/AppSidebar";
 import type { HomeFavorite } from "@/components/dashboard/home-data";
-import type { RecentContent, SearchResult } from "@/hooks/useWorkspaceApi";
+import type { RecentContent, SearchResult, WorkspaceStatusKind } from "@/hooks/useWorkspaceApi";
 import type { RpgTable } from "@/types/rulebook";
 
 type TopbarProps = {
@@ -53,15 +53,18 @@ type TopbarProps = {
   fullscreen: boolean;
   loading: boolean;
   status: string;
+  statusKind: WorkspaceStatusKind;
 };
 
 export function Topbar({
   tables, activeTableId, activeSystemName, sessionActive, onTableChange, onOpenSidebar,
   searchRef, searchQuery, searchResults, recent, favorites, searchOpen, searchLoading, searchError, onSearchChange, onSearchOpen, onSearchResult, onOpenRecent, onOpenFavorite, onNavigate,
   editMode, itemEditMode, canEditItem, editTimeoutMinutes, onReadMode, onEditMode, onItemEditMode, onEditTimeoutChange,
-  onUndo, onImport, onExport, onPlayerView, onToggleCompact, onToggleFullscreen, compact, fullscreen, loading, status,
+  onUndo, onImport, onExport, onPlayerView, onToggleCompact, onToggleFullscreen, compact, fullscreen, loading, status, statusKind,
 }: TopbarProps) {
-  const statusError = /erro|falha/i.test(status);
+  const statusError = statusKind === "error";
+  const statusSaving = statusKind === "saving";
+  const statusLoading = statusKind === "loading";
   // Somente comandos de navegação/visualização: a paleta funciona em Leitura.
   const commands: PaletteCommand[] = [
     ...navigationGroups.flatMap((group) =>
@@ -172,8 +175,14 @@ export function Topbar({
         />
 
         {sessionActive && <Badge variant="success" className="hidden shrink-0 xl:inline-flex"><span aria-hidden="true" className="size-2 rounded-full bg-success" />Sessão ativa</Badge>}
-        <span role="status" aria-live="polite" className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs ${statusError ? "border-destructive/40 text-destructive" : "border-success/25 text-success"}`}>
-          <Database aria-hidden="true" className="size-3.5" />{loading ? "Carregando..." : status}
+        <span
+          role="status"
+          aria-live="polite"
+          aria-label={statusError ? `Erro: ${status}` : status}
+          className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs ${statusError ? "border-destructive/40 bg-destructive/10 text-destructive" : statusSaving || statusLoading ? "border-primary/30 bg-primary/10 text-primary" : "border-success/25 bg-success/10 text-success"}`}
+        >
+          {statusError ? <AlertCircle aria-hidden="true" className="size-3.5" /> : statusSaving || statusLoading ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" /> : <CheckCircle2 aria-hidden="true" className="size-3.5" />}
+          {statusLoading ? "Carregando..." : statusSaving ? "Salvando..." : statusError ? status : "Salvo"}
         </span>
       </div>
 
@@ -189,8 +198,8 @@ export function Topbar({
           onTimeoutChange={onEditTimeoutChange}
         />
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button variant="ghost" size="icon-sm" disabled={!editMode} onClick={onUndo} title="Desfazer última alteração — Ctrl+Z" aria-label="Desfazer última alteração"><Undo2 aria-hidden="true" /></Button>
-          <Button variant="outline" size="sm" disabled={!editMode} title={editMode ? "Importar arquivo JSON" : "Ative o modo Edição para importar"} onClick={onImport}><Upload aria-hidden="true" />Importar</Button>
+          <Button variant="ghost" size="icon-sm" disabled={!editMode || loading} onClick={onUndo} title="Desfazer última alteração — Ctrl+Z" aria-label="Desfazer última alteração"><Undo2 aria-hidden="true" /></Button>
+          <Button variant="outline" size="sm" disabled={!editMode || loading} title={editMode && !loading ? "Importar arquivo JSON" : "Aguarde ou ative o modo Edição para importar"} onClick={onImport}><Upload aria-hidden="true" />Importar</Button>
           <Button variant="outline" size="sm" onClick={onExport}><Download aria-hidden="true" />Exportar</Button>
           <Button variant="outline" size="sm" onClick={onPlayerView}><Eye aria-hidden="true" />Tela jogador</Button>
           <Button variant="ghost" size="icon-sm" onClick={onToggleCompact} aria-pressed={compact} title="Alternar modo compacto" aria-label="Alternar modo compacto"><Rows3 aria-hidden="true" /></Button>

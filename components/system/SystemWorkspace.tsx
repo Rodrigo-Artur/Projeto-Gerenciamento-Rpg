@@ -18,6 +18,7 @@ import { homeFavorites } from "@/components/dashboard/home-data";
 import { AppSidebar, type ViewId } from "@/components/layout/AppSidebar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Topbar } from "@/components/layout/Topbar";
+import { WorkspaceLoadError, WorkspaceLoading, WorkspaceSaveError } from "@/components/ui/workspace-feedback";
 import { CampaignToolsView } from "@/components/system/CampaignToolsView";
 import { CombatView } from "@/components/system/CombatView";
 import { DashboardView } from "@/components/system/DashboardView";
@@ -51,7 +52,7 @@ function protectedFieldFromTarget(target: EventTarget | null) {
 }
 
 export function SystemWorkspace() {
-  const { data, recent, status, loading, load, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
+  const { data, recent, status, statusKind, loading, loadError, saveError, clearSaveError, load, retryLoad, action, search, previewImport, recordRecent } = useWorkspaceApi(false);
   const clientReady = useClientReady();
   const [view, setView] = useState<ViewId>("home");
   const [importOpen, setImportOpen] = useState(false);
@@ -487,6 +488,7 @@ export function SystemWorkspace() {
       fullscreen={fullscreen}
       loading={loading}
       status={status}
+      statusKind={statusKind}
     />}
     pageHeader={<PageHeader
       view={view}
@@ -518,7 +520,22 @@ export function SystemWorkspace() {
       </div>
     ) : undefined}
   >
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {loadError && data.tables.length > 0 && (
+        <WorkspaceLoadError
+          compact
+          message={loadError}
+          onRetry={() => void retryLoad()}
+        />
+      )}
+      {saveError && <WorkspaceSaveError message={saveError} onDismiss={clearSaveError} />}
     <section className={`workspace-content min-h-0 flex-1 overflow-hidden ${editMode ? "workspace-editing" : itemEditMode ? "workspace-readonly workspace-item-edit" : "workspace-readonly"}`} onBeforeInputCapture={protectReadModeFormEvent} onPasteCapture={protectReadModeClipboard} onCutCapture={protectReadModeClipboard} onKeyDownCapture={protectReadModeKeyDown} onInputCapture={touchEdit} onPointerDownCapture={touchEdit}>
+      {loading ? (
+        <WorkspaceLoading label="Carregando a mesa selecionada..." />
+      ) : loadError && data.tables.length === 0 ? (
+        <WorkspaceLoadError message={loadError} onRetry={() => void retryLoad()} />
+      ) : (
+        <>
       {view === "home" && <div className={`${contentHeight} overflow-y-auto`}><HomeView data={data} recent={recent} loading={loading} onContinue={() => setView("session-mode")} onSession={() => setView("session-mode")} onCombat={() => setView("combat")} onLibrary={() => setView("library")} onOpenTable={switchTable} onOpenRecent={openRecent} onOpenContent={openContent} onNavigate={(nextView) => { setView(nextView); setItemEditMode(false); }} /></div>}
       {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} focusHandoutId={activeEditableTab?.type === "handout" ? focusId : undefined} /></div>}
       {view === "dashboard" && <div className={`${contentHeight} overflow-y-auto`}><DashboardView data={data} recent={recent} action={runAction} onOpenTable={switchTable} onOpenRecent={openRecent} /></div>}
@@ -531,7 +548,10 @@ export function SystemWorkspace() {
       {view === "combat" && <div className={contentHeight}><CombatView data={data} action={runAction} /></div>}
       {view === "library" && <div className={contentHeight}><LibraryView data={data} action={runAction} focusId={activeEditableTab?.type === "library" ? focusId : undefined} /></div>}
       {view === "history" && <div className={`${contentHeight} overflow-y-auto`}><HistoryView data={data} action={runAction} /></div>}
+        </>
+      )}
     </section>
+    </div>
 
     {importOpen && <ImportDialog data={data} action={runAction} previewImport={previewImport} initialFile={dropFile} onClose={() => { setImportOpen(false); setDropFile(undefined); }} onFinish={(tableId) => void load(tableId)} />}
   </AppShell>;

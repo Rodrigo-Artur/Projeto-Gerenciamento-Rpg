@@ -1,9 +1,10 @@
 "use client";
 
 import { ArchiveRestore, Clock3, DatabaseBackup, History } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { RulebookData } from "@/types/rulebook";
+import { WorkspaceListEmpty } from "@/components/ui/workspace-feedback";
 
 type VersionRow = {
   id: string;
@@ -15,6 +16,9 @@ type VersionRow = {
 export function HistoryView({ data, action }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {
   const [selectedContent, setSelectedContent] = useState("");
   const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const requestNumber = useRef(0);
   const contentOptions = useMemo(() => [
     ...data.rules.map((item) => ({ value: `rule:${item.id}`, label: `Regra — ${item.title}` })),
     ...data.players.map((item) => ({ value: `player:${item.id}`, label: `Player — ${item.characterName}` })),
@@ -24,17 +28,30 @@ export function HistoryView({ data, action }: { data: RulebookData; action: (pay
   ], [data]);
 
   async function loadVersions(value: string) {
+    const requestId = ++requestNumber.current;
     setSelectedContent(value);
+    setVersions([]);
+    setVersionsError(null);
     if (!value) {
-      setVersions([]);
+      setVersionsLoading(false);
       return;
     }
     const [type, id] = value.split(":");
-    const params = new URLSearchParams({ versionsType: type, versionsId: id, tableId: data.activeTableId });
-    const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return setVersions([]);
-    const json = await response.json() as { versions?: VersionRow[] };
-    setVersions(json.versions ?? []);
+    setVersionsLoading(true);
+    try {
+      const params = new URLSearchParams({ versionsType: type, versionsId: id, tableId: data.activeTableId });
+      const response = await fetch(`/api/rulebook?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Falha ao consultar versões anteriores.");
+      const json = await response.json() as { versions?: VersionRow[] };
+      if (requestId !== requestNumber.current) return;
+      setVersions(json.versions ?? []);
+    } catch (error) {
+      if (requestId === requestNumber.current) {
+        setVersionsError(error instanceof Error ? error.message : "Não foi possível consultar o histórico.");
+      }
+    } finally {
+      if (requestId === requestNumber.current) setVersionsLoading(false);
+    }
   }
 
   async function restoreVersion(versionId: string) {
@@ -67,7 +84,18 @@ export function HistoryView({ data, action }: { data: RulebookData; action: (pay
           {contentOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {selectedContent && versions.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma versão anterior registrada para este item.</p> : versions.map((version) => (
+          {!selectedContent ? (
+            <WorkspaceListEmpty title="Escolha um conteúdo" description="Selecione um item acima para consultar suas versões anteriores." />
+          ) : versionsLoading ? (
+            <p role="status" className="text-sm text-muted-foreground">Carregando versões...</p>
+          ) : versionsError ? (
+            <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+              <p className="text-sm text-destructive">{versionsError}</p>
+              <button type="button" onClick={() => void loadVersions(selectedContent)} className="secondary-button mt-3">Tentar novamente</button>
+            </div>
+          ) : versions.length === 0 ? (
+            <WorkspaceListEmpty title="Sem versões anteriores" description="Ainda não existem versões registradas para este conteúdo." />
+          ) : versions.map((version) => (
             <div key={version.id} className="rounded-lg border border-border bg-background p-3">
               <p className="text-sm font-medium text-foreground">{version.contentName}</p>
               <p className="mt-1 text-xs text-muted-foreground/80">{version.createdAt}</p>
@@ -80,11 +108,11 @@ export function HistoryView({ data, action }: { data: RulebookData; action: (pay
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <section className="mdm-section-card rounded-xl border border-border bg-card/70 p-5">
           <h3 className="flex items-center gap-2 font-semibold text-foreground"><Clock3 className="h-4 w-4 text-primary" />Atividade recente</h3>
-          <div className="mt-4 space-y-2">{data.history.length === 0 ? <p className="text-sm text-muted-foreground">Ainda não há histórico.</p> : data.history.map((entry) => <div key={entry.id} className="rounded-lg border border-border bg-background p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-foreground/90"><span className="font-medium text-primary">{entry.action}</span> {entry.targetType}: {entry.targetName}</p><span className="text-xs text-muted-foreground/80">{entry.createdAt}</span></div>{entry.details && <p className="mt-1 text-xs text-muted-foreground">{entry.details}</p>}</div>)}</div>
+          <div className="mt-4 space-y-2">{data.history.length === 0 ? <WorkspaceListEmpty title="Sem atividade registrada" description="As próximas alterações importantes aparecerão aqui." /> : data.history.map((entry) => <div key={entry.id} className="rounded-lg border border-border bg-background p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-foreground/90"><span className="font-medium text-primary">{entry.action}</span> {entry.targetType}: {entry.targetName}</p><span className="text-xs text-muted-foreground/80">{entry.createdAt}</span></div>{entry.details && <p className="mt-1 text-xs text-muted-foreground">{entry.details}</p>}</div>)}</div>
         </section>
         <section className="mdm-section-card rounded-xl border border-border bg-card/70 p-5">
           <h3 className="flex items-center gap-2 font-semibold text-foreground"><ArchiveRestore className="h-4 w-4 text-primary" />Backups</h3>
-          <div className="mt-4 space-y-2">{(data.backups ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Nenhum backup salvo.</p> : (data.backups ?? []).map((backup) => <div key={backup.id} className="rounded-lg border border-border bg-background p-3"><p className="text-sm text-foreground/90">{backup.reason}</p><p className="mt-1 text-xs text-muted-foreground/80">{backup.createdAt}</p><button onClick={() => { if (confirm("Restaurar este backup? O estado atual será salvo antes.")) void action({ action: "restore-backup", tableId: data.activeTableId, backupId: backup.id }); }} className="secondary-button mt-3 w-full">Restaurar</button></div>)}</div>
+          <div className="mt-4 space-y-2">{(data.backups ?? []).length === 0 ? <WorkspaceListEmpty title="Nenhum backup disponível" description="Crie um backup manual ou aguarde os backups automáticos." /> : (data.backups ?? []).map((backup) => <div key={backup.id} className="rounded-lg border border-border bg-background p-3"><p className="text-sm text-foreground/90">{backup.reason}</p><p className="mt-1 text-xs text-muted-foreground/80">{backup.createdAt}</p><button onClick={() => { if (confirm("Restaurar este backup? O estado atual será salvo antes.")) void action({ action: "restore-backup", tableId: data.activeTableId, backupId: backup.id }); }} className="secondary-button mt-3 w-full">Restaurar</button></div>)}</div>
         </section>
       </div>
     </div>
