@@ -264,9 +264,27 @@ export function SystemWorkspace() {
   }
 
   function opened(type: string, id: string, name: string) {
-    addTab(type, id, name);
-    const content = resolveWorkspaceContent(data, type, id);
-    if (content) void recordRecent(content.type, content.refId, content.title);
+    // Conteúdos recém-criados podem chegar neste callback antes que o React
+    // aplique a resposta da ação. O item vem do editor da mesa atual; permite
+    // uma aba temporária que será validada no próximo payload do servidor.
+    const resolved = resolveWorkspaceContent(data, type, id);
+    if (resolved) {
+      addTab(resolved.type, resolved.refId, resolved.title);
+      void recordRecent(resolved.type, resolved.refId, resolved.title);
+      return;
+    }
+    const supported = new Set(["rule", "npc", "player", "note", "session", "item", "location", "faction", "quest", "timeline", "entity"]);
+    if (loading || !supported.has(type) || !id) return;
+    const view: ViewId = type === "rule" ? "rules" : type === "npc" || type === "player" ? "sheets" : type === "session" || type === "note" ? "sessions" : "world";
+    const tab = createWorkspaceTab(data.activeTableId, { type, refId: id, title: name, view });
+    setTabs((current) => {
+      const previous = tabsOwner === data.activeTableId ? current : [];
+      return [...previous.filter((item) => item.id !== tab.id), tab].slice(-12);
+    });
+    setTabsOwner(data.activeTableId);
+    setActiveTabId(tab.id);
+    setItemEditMode(false);
+    void recordRecent(type, id, name);
   }
 
   function openTab(tab: WorkspaceTab) {
@@ -502,7 +520,7 @@ export function SystemWorkspace() {
       {view === "templates" && <div className={contentHeight}><TemplatesView data={data} action={runAction} /></div>}
       {view === "world" && <div className={contentHeight}><WorldView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["item", "location", "faction", "quest", "timeline", "entity"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
       {view === "campaign" && <div className={contentHeight}><CampaignToolsView data={data} action={runAction} /></div>}
-      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
+      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} focusType={activeEditableTab?.type === "session" || activeEditableTab?.type === "note" ? activeEditableTab.type : undefined} /></div>}
       {view === "combat" && <div className={contentHeight}><CombatView data={data} action={runAction} /></div>}
       {view === "library" && <div className={contentHeight}><LibraryView data={data} action={runAction} focusId={activeEditableTab?.type === "library" ? focusId : undefined} /></div>}
       {view === "history" && <div className={`${contentHeight} overflow-y-auto`}><HistoryView data={data} action={runAction} /></div>}
