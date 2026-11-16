@@ -86,7 +86,7 @@ export function HomeView({
 
   if (data.tables.length === 0) {
     return (
-      <div className="mdm-module mx-auto flex h-full max-w-4xl items-center justify-center p-6">
+      <div className="mdm-module mx-auto flex h-full max-w-4xl flex-col items-center justify-center gap-4 p-6">
         <WorkspaceEmpty kind="sessions" title="Sua mesa começa aqui" description="Crie uma mesa e escolha um sistema para organizar personagens, sessões e regras." />
         <div className="sr-only">Use a seção Gerenciar para criar sua primeira mesa.</div>
         <Button className="ml-4" onClick={() => onNavigate("dashboard")}>Gerenciar mesas</Button>
@@ -161,7 +161,7 @@ export function HomeView({
             <HomeItemButton icon={Swords} title="Combate" meta="Iniciativa e PV" onClick={onCombat} />
             <HomeItemButton icon={Map} title="Mundo" meta="Itens e locais" onClick={() => onNavigate("world")} />
             <HomeItemButton icon={Library} title="Biblioteca" meta="Conteúdo reutilizável" onClick={onLibrary} />
-            <HomeItemButton icon={CalendarRange} title="Calendário" meta="Eventos da campanha" onClick={() => onNavigate("campaign")} />
+            <HomeItemButton icon={CalendarRange} title="Campanha" meta="Relações e calendário" onClick={() => onNavigate("campaign")} />
           </div>
         </HomePanel>
       </div>
