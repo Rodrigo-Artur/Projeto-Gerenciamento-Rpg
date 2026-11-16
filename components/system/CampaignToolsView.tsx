@@ -4,6 +4,7 @@ import { CalendarDays, Link2, Plus, Trash2, UsersRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { CampaignRelation, CalendarEvent, RulebookData, WorldCalendar } from "@/types/rulebook";
+import { WorkspaceListEmpty } from "@/components/ui/workspace-feedback";
 
 type Action = (payload: Record<string, unknown>, options?: { silent?: boolean }) => Promise<unknown>;
 
@@ -62,7 +63,7 @@ function Relations({ data, action }: { data: RulebookData; action: Action }) {
       <button onClick={() => void add()} className="primary-button mt-4 w-full"><Plus className="h-4 w-4" />Adicionar relação</button>
     </aside>
     <section className="space-y-4">
-      {grouped.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Nenhuma relação registrada.</div> : grouped.map(([key, items]) => <div key={key} className="mdm-section-card rounded-xl border border-border bg-card/60 p-4"><h3 className="font-semibold text-primary">{items[0]?.sourceName}</h3><div className="mt-3 grid gap-2 md:grid-cols-2">{items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background p-3"><div><p className="text-sm text-foreground"><span className="text-muted-foreground">{item.relation}</span> → {item.targetName}</p>{item.note && <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>}</div><button onClick={() => confirm(`Excluir a relação com ${item.targetName}?`) && void action({ action: "delete-relation", tableId: data.activeTableId, id: item.id })} className="text-destructive"><Trash2 className="h-4 w-4" /></button></div>)}</div></div>)}
+      {grouped.length === 0 ? <WorkspaceListEmpty title="Nenhuma relação registrada" description="Ative a Edição e conecte personagens, NPCs ou locais para organizar a campanha." /> : grouped.map(([key, items]) => <div key={key} className="mdm-section-card rounded-xl border border-border bg-card/60 p-4"><h3 className="font-semibold text-primary">{items[0]?.sourceName}</h3><div className="mt-3 grid gap-2 md:grid-cols-2">{items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background p-3"><div><p className="text-sm text-foreground"><span className="text-muted-foreground">{item.relation}</span> → {item.targetName}</p>{item.note && <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>}</div><button onClick={() => confirm(`Excluir a relação com ${item.targetName}?`) && void action({ action: "delete-relation", tableId: data.activeTableId, id: item.id })} className="text-destructive"><Trash2 className="h-4 w-4" /></button></div>)}</div></div>)}
     </section>
   </div>;
 }
