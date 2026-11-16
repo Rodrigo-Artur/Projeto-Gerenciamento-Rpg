@@ -113,7 +113,7 @@ export function LibraryView({ data, action }: { data: RulebookData; action: Acti
 }
 
 function LibraryCard({ item, selected, onSelect, onApply, onDelete }: { item: LibraryItem; selected: boolean; onSelect: () => void; onApply: () => void; onDelete: () => void }) {
-  return <article className={`overflow-hidden rounded-xl border ${selected ? "border-primary/60 bg-primary/5" : "border-border bg-card/70"}`}>
+  return <article className={`mdm-section-card overflow-hidden rounded-xl border ${selected ? "border-primary/60 bg-primary/5" : "border-border bg-card/70"}`}>
     {item.imageUrl ? <img src={item.imageUrl} alt={item.name} referrerPolicy="no-referrer" className="h-40 w-full object-cover" /> : <div className="flex h-28 items-center justify-center bg-background text-muted-foreground/70"><ImageIcon className="h-8 w-8" /></div>}
     <div className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] uppercase tracking-wide text-primary">{item.type}</p><h3 className="font-semibold text-foreground">{item.name}</h3></div><label className="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" checked={selected} onChange={onSelect} />Pacote</label></div><p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{item.description}</p><div className="mt-4 flex gap-2"><button onClick={onApply} className="primary-button flex-1"><Archive className="h-4 w-4" />Usar na mesa</button><button onClick={onDelete} className="icon-button text-destructive"><Trash2 className="h-4 w-4" /></button></div></div>
   </article>;
