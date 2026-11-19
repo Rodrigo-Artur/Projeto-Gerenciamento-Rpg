@@ -459,6 +459,13 @@ export const initialPlayerSheets: PlayerSheet[] = [
     tier: "Tier 3; pico físico Tier 4 quando Anti-Scaris está em 100%",
     concept:
       "Humano paranormal com Sangue Dourado adormecido e hospedeiro do simbionte kaiju Anti-Scaris. Atua com controle mental, proteção psíquica, comunicação em grupo, detecção de impurezas e combate físico amplificado pelo simbionte.",
+    meta: {
+      imageUrl: "/demo/erick-anti-scaris.png",
+      imageAlt: "Erick com o simbionte Anti-Scaris envolvendo o braço e o ombro",
+      favorite: true,
+      visibility: "players",
+      archived: false,
+    },
     status: values([
       ["HP Base", "36"], ["HP Total Atual", "57"], ["Pontos de Ação", "20/24"], ["Resistência Base", "16"],
       ["Resistência Total", "32"], ["Poder Paranormal", "16"], ["Barra Anti-Scaris", "100/100"],

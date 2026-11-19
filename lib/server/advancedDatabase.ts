@@ -166,6 +166,7 @@ function ensureAdvancedSchema(db: Database.Database) {
   `);
 
   seedDefaultTemplates(db);
+  seedPortfolioDemo(db);
 }
 
 function seedDefaultTemplates(db: Database.Database) {
@@ -226,6 +227,110 @@ function seedDefaultTemplates(db: Database.Database) {
     }
   });
   tx();
+}
+
+function mergeDemoMeta(db: Database.Database, tableName: "rule_articles" | "npc_sheets" | "player_sheets", id: string, demoMeta: ContentMeta) {
+  const row = db.prepare(`SELECT metadata_json FROM ${tableName} WHERE id = ?`).get(id) as { metadata_json: string } | undefined;
+  if (!row) return;
+  const current = parseMeta(row.metadata_json);
+  if (current.imageUrl) return;
+  db.prepare(`UPDATE ${tableName} SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(JSON.stringify({ ...current, ...demoMeta }), id);
+}
+
+function seedPortfolioDemo(db: Database.Database) {
+  mergeDemoMeta(db, "player_sheets", "erick-medina-andrade", {
+    imageUrl: "/demo/erick-anti-scaris.png",
+    imageAlt: "Erick com o simbionte Anti-Scaris envolvendo o braço e o ombro",
+    favorite: true,
+    visibility: "players",
+    archived: false,
+  });
+  mergeDemoMeta(db, "npc_sheets", "varkhul-presa-da-corrupcao", {
+    imageUrl: "/demo/varkhul.png",
+    imageAlt: "Varkhûl, lobo colossal de corrupção com olhos verdes",
+    favorite: true,
+    visibility: "master",
+    archived: false,
+  });
+  mergeDemoMeta(db, "rule_articles", "kaiju-visao-geral", {
+    imageUrl: "/demo/arquivo-obsidiano.png",
+    imageAlt: "Arquivo Obsidiano, quartel subterrâneo dos caçadores de kaiju",
+    favorite: true,
+    visibility: "master",
+    archived: false,
+  });
+
+  const insertEntity = db.prepare(`
+    INSERT OR IGNORE INTO workspace_entities
+      (id, table_id, type, name, summary, content, tags_json, visibility, favorite, archived, data_json)
+    VALUES
+      (@id, @tableId, @type, @name, @summary, @content, @tagsJson, @visibility, @favorite, 0, @dataJson)
+  `);
+  const entities: WorldEntity[] = [
+    {
+      id: "arquivo-obsidiano",
+      tableId: DEFAULT_TABLE_ID,
+      type: "location",
+      name: "Arquivo Obsidiano",
+      summary: "Quartel subterrâneo que reúne mapas, relíquias e pesquisas sobre ameaças kaiju.",
+      content: "Erguido dentro de uma caverna de basalto, o Arquivo Obsidiano funciona como biblioteca, sala de guerra e cofre de artefatos. O mapa central projeta zonas de atividade kaiju, enquanto as galerias superiores guardam relatórios de campo e espécimes selados.",
+      tags: ["quartel", "biblioteca", "relíquias", "caçadores"],
+      visibility: "players",
+      favorite: true,
+      archived: false,
+      data: { imageUrl: "/demo/arquivo-obsidiano.png", district: "Subsolo da Zona Norte", security: "Nível Ônix" },
+    },
+    {
+      id: "culto-da-macula",
+      tableId: DEFAULT_TABLE_ID,
+      type: "faction",
+      name: "Culto da Mácula",
+      summary: "Seita que tenta transformar corrupção espiritual em uma arma controlável.",
+      content: "O culto espalha símbolos de podridão em ruínas sagradas e prepara receptáculos para Varkhûl. Seus membros agem em células independentes, ligadas por sonhos induzidos pelo avatar.",
+      tags: ["antagonistas", "corrupção", "varkhûl"],
+      visibility: "master",
+      favorite: false,
+      archived: false,
+      data: { imageUrl: "/demo/varkhul.png", influence: "Crescente", leader: "A Voz do Brejo" },
+    },
+    {
+      id: "cacar-a-presa-da-corrupcao",
+      tableId: DEFAULT_TABLE_ID,
+      type: "quest",
+      name: "Caçar a Presa da Corrupção",
+      summary: "Localizar o ritual do culto e impedir a manifestação completa de Varkhûl.",
+      content: "A energia detectada no pântano cresce a cada noite. A equipe deve recuperar três selos purificadores, identificar o local do ritual e enfrentar o avatar antes que a área inteira seja contaminada.",
+      tags: ["missão principal", "boss", "investigação"],
+      visibility: "players",
+      favorite: true,
+      archived: false,
+      data: { status: "Em andamento", reward: "Acesso ao Cofre Ônix", objectives: [{ text: "Recuperar os três selos purificadores", done: true }, { text: "Encontrar o ritual no pântano", done: true }, { text: "Derrotar Varkhûl", done: false }], imageUrl: "/demo/varkhul.png" },
+    },
+  ];
+  const insertEntities = db.transaction(() => {
+    for (const item of entities) {
+      insertEntity.run({ id: item.id, tableId: item.tableId, type: item.type, name: item.name, summary: item.summary, content: item.content, tagsJson: JSON.stringify(item.tags), visibility: item.visibility, favorite: item.favorite ? 1 : 0, dataJson: JSON.stringify(item.data ?? {}) });
+    }
+  });
+  insertEntities();
+
+  const combat: CombatState = {
+    id: "demo-confronto-varkhul",
+    tableId: DEFAULT_TABLE_ID,
+    name: "Confronto no Pântano Corrompido",
+    round: 3,
+    turnIndex: 0,
+    status: "prepared",
+    participants: [
+      { id: "demo-erick", sourceType: "player", sourceId: "erick-medina-andrade", name: "Erick Medina Andrade", initiative: 18, hpCurrent: 57, hpMax: 57, armorClass: 32, conditions: [], resources: [{ label: "Pontos de Ação", value: "20/24" }, { label: "Anti-Scaris", value: "100/100" }], abilities: [], imageUrl: "/demo/erick-anti-scaris.png" },
+      { id: "demo-varkhul", sourceType: "npc", sourceId: "varkhul-presa-da-corrupcao", name: "Varkhûl, Presa da Corrupção", initiative: 15, hpCurrent: 420, hpMax: 560, conditions: ["Exposto"], timedConditions: [{ id: "demo-condicao", name: "Exposto", remainingRounds: 2, tick: "end" }], resources: [{ label: "Marcas de Corrupção", value: "2" }], abilities: [], hidden: false, phase: "Fase 2", imageUrl: "/demo/varkhul.png" },
+    ],
+    notes: ["Os selos purificadores reduzem a aura de corrupção.", "O terreno alagado conta como terreno difícil."],
+  };
+  db.prepare(`
+    INSERT OR IGNORE INTO combat_states (id, table_id, name, status, state_json, updated_at)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `).run(combat.id, combat.tableId, combat.name, combat.status, JSON.stringify(combat));
 }
 
 function getTable(db: Database.Database, tableId?: string): RpgTable {

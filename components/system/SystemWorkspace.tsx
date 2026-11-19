@@ -367,7 +367,7 @@ export function SystemWorkspace() {
       {view === "session-mode" && <div className={contentHeight}><SessionCockpitView data={data} action={runAction} onOpenCombat={() => setView("combat")} onOpenContent={openContent} /></div>}
       {view === "dashboard" && <div className={`${contentHeight} overflow-y-auto`}><DashboardView data={data} recent={recent} action={runAction} onOpenTable={(tableId) => void load(tableId)} onOpenRecent={openRecent} /></div>}
       {view === "rules" && <div className={contentHeight}><RulesView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab?.type === "rule" ? focusId : undefined} /></div>}
-      {view === "sheets" && <div className={contentHeight}><SheetsView key={`sheets:${activeEditableTab?.id ?? "base"}`} data={sheetData} action={runAction} onOpened={opened} /></div>}
+      {view === "sheets" && <div className={contentHeight}><SheetsView key={`sheets:${activeEditableTab?.id ?? "base"}`} data={sheetData} action={runAction} onOpened={opened} focusType={activeEditableTab?.type === "npc" ? "npc" : activeEditableTab?.type === "player" ? "player" : undefined} /></div>}
       {view === "templates" && <div className={contentHeight}><TemplatesView data={data} action={runAction} /></div>}
       {view === "world" && <div className={contentHeight}><WorldView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["item", "location", "faction", "quest", "timeline", "entity"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
       {view === "campaign" && <div className={contentHeight}><CampaignToolsView data={data} action={runAction} /></div>}

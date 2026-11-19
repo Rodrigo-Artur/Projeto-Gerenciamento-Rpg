@@ -285,6 +285,54 @@ function seedInitialData(db: Database.Database) {
   }
 
   insertNpcs(db, DEFAULT_TABLE_ID, allInitialNpcSheets);
+  seedPortfolioSession(db);
+}
+
+function seedPortfolioSession(db: Database.Database) {
+  const row = db.prepare("SELECT notes_json, sessions_json FROM rpg_tables WHERE id = ?").get(DEFAULT_TABLE_ID) as { notes_json: string; sessions_json: string } | undefined;
+  if (!row) return;
+
+  const notes = parseJson<TableNote[]>(row.notes_json, []);
+  const sessions = parseJson<SessionPlan[]>(row.sessions_json, []);
+  if (!notes.some((item) => item.id === "demo-pistas-varkhul")) {
+    notes.push({
+      id: "demo-pistas-varkhul",
+      title: "Pistas do ritual de Varkhûl",
+      content: "1. Pegadas lupinas terminam diante de símbolos queimados no solo.\n2. A prata ritualística reage à água do pântano.\n3. O terceiro selo está com a Voz do Brejo.\n4. Destruir os focos de corrupção reduz a aura do avatar.",
+      isPrivate: true,
+      tags: ["varkhûl", "ritual", "pistas"],
+      favorite: true,
+      visibility: "master",
+    });
+  }
+  if (!sessions.some((item) => item.id === "demo-sessao-pantano")) {
+    sessions.push({
+      id: "demo-sessao-pantano",
+      title: "Sessão 12 — O Pântano Corrompido",
+      summary: "Investigar o ritual do Culto da Mácula e impedir a manifestação completa de Varkhûl.",
+      scenes: [
+        "Briefing no Arquivo Obsidiano",
+        "Travessia pela zona contaminada",
+        "Descoberta do círculo ritual",
+        "Confronto contra Varkhûl",
+        "Consequências e retorno ao quartel",
+      ],
+      linkedRefs: ["Erick Medina Andrade", "Varkhûl, Presa da Corrupção", "Arquivo Obsidiano"],
+      linkedItems: [
+        { type: "player", id: "erick-medina-andrade", label: "Player: Erick Medina Andrade" },
+        { type: "npc", id: "varkhul-presa-da-corrupcao", label: "NPC: Varkhûl, Presa da Corrupção" },
+        { type: "entity", id: "arquivo-obsidiano", label: "Local: Arquivo Obsidiano" },
+      ],
+      notes: ["Dar aos jogadores uma pista automática sobre a prata ritualística.", "Abaixo de 50% de HP, Varkhûl entra na Fase 2.", "O objetivo não exige matar o avatar: selar o ritual também encerra o confronto."],
+      status: "planned",
+      sessionNumber: 12,
+      scheduledFor: "Próxima sessão",
+      visibility: "master",
+    });
+  }
+
+  db.prepare("UPDATE rpg_tables SET notes_json = ?, sessions_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(JSON.stringify(notes), JSON.stringify(sessions), DEFAULT_TABLE_ID);
 }
 
 function prefixId(ownerId: string, id: string) {

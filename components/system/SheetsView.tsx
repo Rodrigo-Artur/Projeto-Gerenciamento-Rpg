@@ -18,9 +18,9 @@ function initialAttributes(data: RulebookData) { return (data.systemConfig?.attr
 function initialResources(data: RulebookData) { return (data.systemConfig?.resources ?? []).map((label) => ({ label, value: "0" })); }
 function typedConfirm(name: string, verb = "excluir") { return prompt(`Para ${verb} “${name}”, digite exatamente o nome:`, "") === name; }
 
-export function SheetsView({ data, action, onOpened }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void }) {
-  const [kind, setKind] = useState<"players" | "npcs">("players");
-  const [selectedId, setSelectedId] = useState(data.players[0]?.id ?? data.npcs[0]?.id ?? "");
+export function SheetsView({ data, action, onOpened, focusType }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusType?: "player" | "npc" }) {
+  const [kind, setKind] = useState<"players" | "npcs">(focusType === "npc" ? "npcs" : "players");
+  const [selectedId, setSelectedId] = useState(focusType === "npc" ? (data.npcs[0]?.id ?? "") : (data.players[0]?.id ?? data.npcs[0]?.id ?? ""));
   const [query, setQuery] = useState("");
   const players = useMemo(() => data.players.filter((item) => !query || `${item.characterName} ${item.playerName} ${item.role}`.toLowerCase().includes(query.toLowerCase())), [data.players, query]);
   const npcs = useMemo(() => data.npcs.filter((item) => !query || `${item.name} ${item.role} ${item.category}`.toLowerCase().includes(query.toLowerCase())), [data.npcs, query]);
@@ -113,7 +113,7 @@ function NpcEditor({ item, data, action }: { item: NpcSheet; data: RulebookData;
 }
 
 function MediaField({ meta, onChange }: { meta?: ContentMeta; onChange: (patch: Partial<ContentMeta>) => void }) {
-  return <div className="grid gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 md:grid-cols-[180px_1fr]">{meta?.imageUrl ? <img src={meta.imageUrl} alt={meta.imageAlt ?? "Retrato"} referrerPolicy="no-referrer" className="h-44 w-full rounded-xl border border-zinc-800 bg-zinc-950 object-cover" /> : <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950 text-zinc-700"><ImageIcon className="h-8 w-8" /></div>}<div><p className="font-semibold text-zinc-200">Imagem externa</p><p className="mt-1 text-xs leading-5 text-zinc-500">Cole uma URL direta de imagem. Funciona com hospedagens de terceiros como Imgur; para Imgur prefira links como https://i.imgur.com/arquivo.png.</p><Field label="URL da imagem" value={meta?.imageUrl ?? ""} onChange={(imageUrl) => onChange({ imageUrl })} /><Field label="Texto alternativo" value={meta?.imageAlt ?? ""} onChange={(imageAlt) => onChange({ imageAlt })} /></div></div>;
+  return <div className="grid gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 md:grid-cols-[180px_1fr]">{meta?.imageUrl ? <img src={meta.imageUrl} alt={meta.imageAlt ?? "Retrato"} referrerPolicy="no-referrer" className="h-44 w-full rounded-xl border border-zinc-800 bg-zinc-950 object-cover" /> : <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950 text-zinc-700"><ImageIcon className="h-8 w-8" /></div>}<div><p className="font-semibold text-zinc-200">Imagem da ficha</p><p className="mt-1 text-xs leading-5 text-zinc-500">Use um arquivo da pasta pública, como /demo/retrato.png, ou uma URL direta de imagem.</p><Field label="Caminho ou URL da imagem" value={meta?.imageUrl ?? ""} onChange={(imageUrl) => onChange({ imageUrl })} /><Field label="Texto alternativo" value={meta?.imageAlt ?? ""} onChange={(imageAlt) => onChange({ imageAlt })} /></div></div>;
 }
 
 function EditorShell({ title, subtitle, meta, autosave, onFavorite, onVisibility, onDelete, onSave, children }: { title: string; subtitle: string; meta?: ContentMeta; autosave: AutosaveState; onFavorite: () => void; onVisibility: () => void; onDelete: () => void; onSave: () => void; children: React.ReactNode }) {

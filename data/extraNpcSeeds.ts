@@ -11,6 +11,13 @@ export const extraNpcSheets: NpcSheet[] = [
     role: "Boss Tier 4 / avatar lupino de corrupção",
     description:
       "Avatar de caça de um deus da corrupção. Surge como um lobo colossal de carne escura, ossos expostos, olhos verdes doentios e fumaça negra saindo da boca. Deve ser usado como ameaça de arco, guardião corrompido, avatar invocado por cultistas ou manifestação direta de uma entidade maior. Sua força principal é desgastar, marcar, enfraquecer e transformar o campo de batalha em território corrompido.",
+    meta: {
+      imageUrl: "/demo/varkhul.png",
+      imageAlt: "Varkhûl, lobo colossal de corrupção com olhos verdes",
+      favorite: true,
+      visibility: "master",
+      archived: false,
+    },
     stats: values([
       ["Categoria", "Boss / Avatar Divino"],
       ["Tier", "Tier 4"],

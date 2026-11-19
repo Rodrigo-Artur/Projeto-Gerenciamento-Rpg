@@ -149,6 +149,83 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_relations_table ON campaign_relations(table_id);
     CREATE INDEX IF NOT EXISTS idx_handouts_table ON handouts(table_id, updated_at);
   `);
+  seedPortfolioDemo(db);
+}
+
+function seedPortfolioDemo(db: Database.Database) {
+  const tableId = "mesa-principal";
+  const systemId = "kaiju-rpg";
+  const timestamp = nowIso();
+  const libraryItems: LibraryItem[] = [
+    {
+      id: "demo-library-varkhul",
+      systemId,
+      type: "npc",
+      name: "Varkhûl, Presa da Corrupção",
+      description: "Boss Tier 4 focado em controle de território, marcas de corrupção e combate em fases.",
+      tags: ["boss", "tier-4", "corrupção"],
+      imageUrl: "/demo/varkhul.png",
+      payload: { sourceId: "varkhul-presa-da-corrupcao", category: "ameacas-pesadas" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: "demo-library-arquivo",
+      systemId,
+      type: "entity",
+      name: "Arquivo Obsidiano",
+      description: "Local de campanha que combina quartel, biblioteca, sala de guerra e cofre de relíquias.",
+      tags: ["local", "quartel", "biblioteca"],
+      imageUrl: "/demo/arquivo-obsidiano.png",
+      payload: { sourceId: "arquivo-obsidiano", type: "location" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: "demo-library-encontro",
+      systemId,
+      type: "encounter",
+      name: "Confronto no Pântano Corrompido",
+      description: "Encontro preparado com Erick e Varkhûl, terreno difícil, selos purificadores e transição de fase.",
+      tags: ["encontro", "boss", "pântano"],
+      imageUrl: "/demo/varkhul.png",
+      payload: { sourceId: "demo-confronto-varkhul", participants: 2 },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+  const insertLibrary = db.prepare(`
+    INSERT OR IGNORE INTO library_items
+      (id, system_id, type, name, description, tags_json, image_url, payload_json, created_at, updated_at)
+    VALUES
+      (@id, @systemId, @type, @name, @description, @tagsJson, @imageUrl, @payloadJson, @createdAt, @updatedAt)
+  `);
+  const insertLibraryItems = db.transaction(() => {
+    for (const item of libraryItems) {
+      insertLibrary.run({ id: item.id, systemId: item.systemId ?? null, type: item.type, name: item.name, description: item.description, tagsJson: JSON.stringify(item.tags), imageUrl: item.imageUrl ?? null, payloadJson: JSON.stringify(item.payload), createdAt: item.createdAt, updatedAt: item.updatedAt });
+    }
+  });
+  insertLibraryItems();
+
+  db.prepare(`
+    INSERT OR IGNORE INTO content_packs (id, name, description, item_ids_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("demo-pack-pantano", "Arco do Pântano Corrompido", "Boss, local e encontro prontos para a demonstração.", JSON.stringify(libraryItems.map((item) => item.id)), timestamp, timestamp);
+
+  db.prepare(`
+    INSERT OR IGNORE INTO handouts (id, table_id, title, content, image_url, visibility, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run("demo-handout-arquivo", tableId, "Mapa estratégico do Arquivo Obsidiano", "Mapa da região contaminada com as três rotas possíveis até o ritual.", "/demo/arquivo-obsidiano.png", "players", timestamp, timestamp);
+
+  db.prepare(`
+    INSERT OR IGNORE INTO workspace_runtime (table_id, active_session_id, quick_notes_json, calendar_json, updated_at)
+    VALUES (?, NULL, ?, ?, ?)
+  `).run(tableId, JSON.stringify(["Confirmar a ordem de iniciativa", "Revelar o terceiro selo na cena 2", "Aplicar a Fase 2 de Varkhûl abaixo de 50% HP"]), JSON.stringify({ day: 18, month: 7, year: 2142, calendarName: "Calendário da Queda", monthName: "Mês das Cinzas", events: [{ id: "demo-evento-ritual", title: "Ritual da Lua Morta", day: 19, month: 7, year: 2142, description: "Prazo final para impedir a manifestação completa de Varkhûl.", visibility: "players" }] }), timestamp);
+  db.prepare(`
+    UPDATE workspace_runtime
+    SET quick_notes_json = ?, calendar_json = ?, updated_at = ?
+    WHERE table_id = ? AND quick_notes_json = '[]'
+  `).run(JSON.stringify(["Confirmar a ordem de iniciativa", "Revelar o terceiro selo na cena 2", "Aplicar a Fase 2 de Varkhûl abaixo de 50% HP"]), JSON.stringify({ day: 18, month: 7, year: 2142, calendarName: "Calendário da Queda", monthName: "Mês das Cinzas", events: [{ id: "demo-evento-ritual", title: "Ritual da Lua Morta", day: 19, month: 7, year: 2142, description: "Prazo final para impedir a manifestação completa de Varkhûl.", visibility: "players" }] }), timestamp, tableId);
 }
 
 function ensureRuntime(tableId: string) {
