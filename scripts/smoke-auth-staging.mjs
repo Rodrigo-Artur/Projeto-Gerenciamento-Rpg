@@ -85,14 +85,22 @@ assert.ok(masterRead.read.includes("5.1.0"));
 assert.ok(!playerRead.read.includes("5.1.0"),"Read state isolated per account");
 
 const provisioning=path.join(process.cwd(),"scripts","grant-legacy-owner.mjs");
-execFileSync(process.execPath,[provisioning,"--email",ownerEmail,"--confirm"],{cwd:process.cwd(),stdio:"pipe"});
+function provision(email) {
+  const container=process.env.MDM_TEST_CONTAINER_NAME;
+  if (container) {
+    if (!/^mesa-v6-test-[a-z0-9-]+$/.test(container)) throw new Error("Invalid staging container name");
+    return execFileSync("docker",["exec",container,"node","/app/scripts/grant-legacy-owner.mjs","--email",email,"--confirm"],{stdio:"pipe"});
+  }
+  return execFileSync(process.execPath,[provisioning,"--email",email,"--confirm"],{cwd:process.cwd(),stdio:"pipe"});
+}
+provision(ownerEmail);
 const ownerApi=await master.request("/api/rulebook");
 assert.equal(ownerApi.status,200,`Provisioned owner API status: ${ownerApi.status}`);
 const afterOwner=await player.request("/api/rulebook");
 assert.equal(afterOwner.status,403,"Player remains blocked after owner provisioning");
 let takeoverBlocked = false;
 try {
-  execFileSync(process.execPath,[provisioning,"--email",playerEmail,"--confirm"],{cwd:process.cwd(),stdio:"pipe"});
+  provision(playerEmail);
 } catch { takeoverBlocked = true; }
 assert.ok(takeoverBlocked,"Cannot provision a second legacy owner");
 console.log("PASS: anonymous/exports protected; cross-origin rejected; login credentials; non-owner isolated; changelog reads per-user; owner provision; no second owner.");
