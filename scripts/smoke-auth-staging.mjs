@@ -58,50 +58,77 @@ const crossSite = await anonymous.request("/api/auth/register",{
 });
 assert.equal(crossSite.status,403,"Cross-site registration denied");
 
-const master=new Client(), player=new Client();
-const ownerEmail=unique("owner"), playerEmail=unique("player");
-assert.equal((await master.register(ownerEmail,"gm")).status,201,"Master registration");
+const master=new Client(), player=new Client(), otherMaster=new Client();
+const ownerEmail=unique("owner"), playerEmail=unique("player"), otherEmail=unique("othergm");
+const stagingContainer = process.env.MDM_TEST_CONTAINER_NAME;
+const bootstrapPath = path.join(process.cwd(),"scripts","bootstrap-owner.mjs");
+function adminCli(script,email) {
+  if (stagingContainer) {
+    if (!/^mesa-v6-test-[a-z0-9-]+$/.test(stagingContainer)) throw new Error("Invalid test container name");
+    return execFileSync("docker",["exec",stagingContainer,"node",`/app/scripts/${script}`,"--email",email,"--confirm"],{stdio:"pipe"}).toString();
+  }
+  return execFileSync(process.execPath,[path.join(process.cwd(),"scripts",script),"--email",email,"--confirm"],{cwd:process.cwd(),stdio:"pipe"}).toString();
+}
 assert.equal((await player.register(playerEmail,"player")).status,201,"Player registration");
-assert.equal((await master.register(ownerEmail,"gm")).status,400,"Duplicate email blocked");
+const generatedLink = adminCli("bootstrap-owner.mjs",ownerEmail);
+const activationToken = /#token=([A-Za-z0-9_-]{43})/.exec(generatedLink)?.[1];
+assert.ok(activationToken, "Owner activation link generated");
+assert.equal((await master.register(ownerEmail,"gm")).status,400,"Reserved owner email cannot be hijacked");
+
+assert.equal((await otherMaster.register(otherEmail,"gm")).status,201,"Non-owner GM registration");
+assert.equal((await player.register(playerEmail,"player")).status,400,"Duplicate email blocked");
 const wrong = new Client();
 await wrong.signIn(ownerEmail,"definitely-not-the-right-password");
 const wrongSession = await (await wrong.request("/api/auth/session")).json();
-assert.ok(!wrongSession?.user?.email,"Invalid password creates no session");
-for(const [client,email] of [[master,ownerEmail],[player,playerEmail]]){
+assert.ok(!wrongSession?.user?.email,"Invalid or pending password creates no session");
+for(const [client,email] of [[player,playerEmail],[otherMaster,otherEmail]]){
   const result=await client.signIn(email);
   assert.ok([200,302,303].includes(result.status),`AuthJS sign-in status ${result.status}`);
   const session=await client.request("/api/auth/session");
   const info=await session.json();
   assert.equal(info?.user?.email,email,`Session authenticated ${email}`);
-  assert.equal((await client.request("/api/rulebook")).status,403,"Ordinary account blocked from legacy campaigns");
-  assert.equal((await client.request("/api/rulebook?export=1")).status,403,"Ordinary account cannot export data");
+  assert.equal((await client.request("/api/rulebook")).status,403,"Non-owner blocked from legacy campaigns");
+  assert.equal((await client.request("/api/rulebook?export=1")).status,403,"Non-owner cannot export data");
   assert.equal((await client.request("/api/releases")).status,200,"Changelog accessible");
 }
+assert.equal((await player.request("/api/releases/read",{
+  method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:"5.1.0"})
+})).status,200);
+const playerReadBefore=await (await player.request("/api/releases")).json();
+const anotherRead=await (await otherMaster.request("/api/releases")).json();
+assert.ok(playerReadBefore.read.includes("5.1.0"));
+assert.ok(!anotherRead.read.includes("5.1.0"),"Changelog read state isolated");
 
-assert.equal((await master.request("/api/releases/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:"5.1.0"})})).status,200);
-const masterRead=await (await master.request("/api/releases")).json();
-const playerRead=await (await player.request("/api/releases")).json();
-assert.ok(masterRead.read.includes("5.1.0"));
-assert.ok(!playerRead.read.includes("5.1.0"),"Read state isolated per account");
-
-const provisioning=path.join(process.cwd(),"scripts","grant-legacy-owner.mjs");
-function provision(email) {
-  const container=process.env.MDM_TEST_CONTAINER_NAME;
-  if (container) {
-    if (!/^mesa-v6-test-[a-z0-9-]+$/.test(container)) throw new Error("Invalid staging container name");
-    return execFileSync("docker",["exec",container,"node","/app/scripts/grant-legacy-owner.mjs","--email",email,"--confirm"],{stdio:"pipe"});
-  }
-  return execFileSync(process.execPath,[provisioning,"--email",email,"--confirm"],{cwd:process.cwd(),stdio:"pipe"});
-}
-provision(ownerEmail);
+const invalidActivation=await anonymous.request("/api/auth/activate",{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({token:"f".repeat(43),password:strongPassword})
+});
+assert.equal(invalidActivation.status,400,"Invalid owner activation token rejected");
+const activation=await master.request("/api/auth/activate",{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({token:activationToken,password:strongPassword})
+});
+assert.equal(activation.status,200,"Owner claim activated");
+const secondUse=await anonymous.request("/api/auth/activate",{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({token:activationToken,password:strongPassword})
+});
+assert.equal(secondUse.status,400,"Owner activation token cannot be reused");
+const result=await master.signIn(ownerEmail);
+assert.ok([200,302,303].includes(result.status), "Owner login succeeds after activation");
+const session=await (await master.request("/api/auth/session")).json();
+assert.equal(session?.user?.email,ownerEmail,"Owner session authenticated");
 const ownerApi=await master.request("/api/rulebook");
 assert.equal(ownerApi.status,200,`Provisioned owner API status: ${ownerApi.status}`);
 const afterOwner=await player.request("/api/rulebook");
 assert.equal(afterOwner.status,403,"Player remains blocked after owner provisioning");
 let takeoverBlocked = false;
 try {
-  provision(playerEmail);
+  adminCli("grant-legacy-owner.mjs",playerEmail);
 } catch { takeoverBlocked = true; }
 assert.ok(takeoverBlocked,"Cannot provision a second legacy owner");
-console.log("PASS: anonymous/exports protected; cross-origin rejected; login credentials; non-owner isolated; changelog reads per-user; owner provision; no second owner.");
+let secondBootstrapBlocked = false;
+try { adminCli("bootstrap-owner.mjs",otherEmail); } catch { secondBootstrapBlocked = true; }
+assert.ok(secondBootstrapBlocked,"Cannot issue second owner claim");
+console.log("PASS: anonymous and exports protected; email reserved; accounts/login; changelog isolated; one-use owner activation; owner 200; non-owner 403; second owner blocked.");
 
