@@ -28,3 +28,21 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Auth and campaign isolation smoke test
+        run: |
+          set -euo pipefail
+          export AUTH_URL=http://127.0.0.1:3100
+          AUTH_SECRET="$(openssl rand -base64 48)" npm run start -- -H 127.0.0.1 -p 3100 > /tmp/mesa-auth-test.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl -fsS "$AUTH_URL/api/auth/csrf" > /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            tail -80 /tmp/mesa-auth-test.log
+            exit 1
+          fi
+          NODE_ENV=test node scripts/smoke-auth-staging.mjs
