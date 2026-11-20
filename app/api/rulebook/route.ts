@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentUser } from "@/lib/server/currentUser";
 
 import {
   createAutomaticBackup,
@@ -75,6 +76,28 @@ import type {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Security boundary for legacy APIs: role preference is NEVER authorization.
+// Multi-user campaign permissions are introduced separately in 6.1.
+async function legacyOwnerOnly(): Promise<NextResponse | null> {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({error: "Faça login."}, {status: 401});
+  if (!user.isLegacyOwner) return NextResponse.json({error: "Você não possui acesso às campanhas antigas."}, {status: 403});
+  return null;
+}
+
+function trustedMutationOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    const host = new URL(origin).host;
+    return host === new URL(request.url).host ||
+      host === new URL(process.env.AUTH_URL || request.url).host;
+  } catch {
+    return false;
+  }
+}
+
 
 function queryValue(request: Request, key: string) {
   return new URL(request.url).searchParams.get(key) ?? undefined;
@@ -176,6 +199,8 @@ function logMutation(tableId: string, action: string | undefined, body: Record<s
 }
 
 export async function GET(request: Request) {
+  const denied = await legacyOwnerOnly();
+  if (denied) return denied;
   const tableId = queryValue(request, "tableId");
   const search = queryValue(request, "search");
   const view = queryValue(request, "view");
@@ -198,6 +223,9 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const denied = await legacyOwnerOnly();
+  if (denied) return denied;
+  if (!trustedMutationOrigin(request)) return NextResponse.json({error:"Origem inválida."},{status:403});
   const data = (await request.json()) as RulebookData;
   const tableId = data.activeTableId || queryValue(request, "tableId") || "mesa-principal";
   const systemId = data.activeSystemId || "kaiju-rpg";
@@ -214,6 +242,9 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await legacyOwnerOnly();
+  if (denied) return denied;
+  if (!trustedMutationOrigin(request)) return NextResponse.json({error:"Origem inválida."},{status:403});
   const body = (await request.json()) as Record<string, unknown> & { action?: string; tableId?: string; systemId?: string };
   const tableId = body.tableId || "mesa-principal";
   const systemId = body.systemId || "kaiju-rpg";

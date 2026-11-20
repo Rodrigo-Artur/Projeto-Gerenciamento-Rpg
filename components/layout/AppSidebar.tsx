@@ -3,10 +3,13 @@
 import {
   BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, History,
   House, LayoutDashboard, Library, Link2, Map, Menu, Settings2,
-  Swords, Users, X,
+  Swords, Users, X, LogOut, Bell,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
 
 export type ViewId =
   | "home" | "session-mode" | "dashboard" | "rules" | "sheets"
@@ -66,6 +69,15 @@ export function AppSidebar({
   activeView, onNavigate, tableName, systemName, sessionActive,
   collapsed, onToggleCollapsed, mobileOpen, onCloseMobile,
 }: AppSidebarProps) {
+  const [unreadUpdates, setUnreadUpdates] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/releases", {cache: "no-store"})
+      .then((response) => response.ok ? response.json() as Promise<{releases:{version:string}[];read:string[]}> : null)
+      .then((data) => { if (active && data) setUnreadUpdates(data.releases.filter((item) => !data.read.includes(item.version)).length); })
+      .catch(() => { /* Badge is optional when offline. */ });
+    return () => { active = false; };
+  }, []);
   function contents(isCompact: boolean, mobile: boolean) {
     return (
       <>
@@ -118,6 +130,19 @@ export function AppSidebar({
           ))}
         </nav>
         <div className={cn("border-t border-border/70 p-3", isCompact && "px-2")}>
+          <Link href="/updates" aria-label={isCompact ? "Novidades e atualizações" : undefined} title={isCompact ? "Novidades" : undefined}
+            onClick={mobile ? onCloseMobile : undefined}
+            className={cn("mb-1 flex min-h-9 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground", isCompact && "justify-center px-2")}>
+            <Bell aria-hidden="true" className="size-4 shrink-0" />
+            {!isCompact && <span className="flex-1">Novidades</span>}
+            {unreadUpdates > 0 && <span aria-label={unreadUpdates + " atualizações não lidas"} className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">{unreadUpdates}</span>}
+          </Link>
+          <button type="button" onClick={() => void signOut({callbackUrl:"/login"})}
+            title={isCompact ? "Sair da conta" : undefined} aria-label={isCompact ? "Sair da conta" : undefined}
+            className={cn("mb-2 flex min-h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground", isCompact && "justify-center px-2")}>
+            <LogOut aria-hidden="true" className="size-4 shrink-0" />
+            {!isCompact && <span>Sair da conta</span>}
+          </button>
           {!isCompact ? (
             <div className="rounded-xl border border-border/70 bg-secondary/80 p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mesa ativa</p>
