@@ -56,3 +56,14 @@ MDM_TEST_BASE_URL=http://127.0.0.1:3100 NODE_ENV=test node scripts/smoke-auth-st
 ```
 
 O script valida a base e atribui um proprietário fictício; portanto, use **um banco de teste descartável novo a cada execução**. Essa condição é garantida pela cópia limpa do projeto no GitHub Actions.
+
+
+## Homologação adicional em Docker (MooniServer)
+
+A imagem `mooniserver/mesa-do-mestre:v6-auth-preview` foi compilada a partir do código isolado da 6.0 e executada num container de teste `mesa-v6-test-app` com o volume **separado** `mooniserver-mesa-v6-preview-data`, publicado apenas em `127.0.0.1:3101`.
+
+Resultados verificados: API sem sessão HTTP 401; criação de contas, autenticação por credenciais, bloqueio de usuário não proprietário HTTP 403, status HTTP 200 após atribuição de proprietário fictício e proteção contra um segundo proprietário. O smoke test rodou com sucesso em Node/Next.js locais **e** dentro do container Docker de preview. O container público `mooniserver-mesa` e o volume `mooniserver-mesa_mesa-data` não foram modificados.
+
+**Atenção à montagem de scripts no Docker:** o usuário da imagem é UID 10001 (sem root). Diretórios montados com permissão `0700` e arquivos `0600` pertencentes a outro usuário não podem ser lidos por esse UID. O primeiro teste identificou esse problema. Para usar `grant-legacy-owner.mjs` em ambiente isolado, monte scripts administrativos sem segredos com permissões de leitura adequadas (ex.: diretório `0755` e scripts `0644`) e execute o comando como o usuário da aplicação, não como root, para não deixar arquivos SQLite/WAL pertencendo ao root.
+
+A imagem de preview não deve ser confundida com `mooniserver/mesa-do-mestre:local` em produção. A aplicação pública continua executando a imagem antiga.
