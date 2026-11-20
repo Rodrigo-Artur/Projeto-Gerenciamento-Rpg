@@ -31,7 +31,8 @@ export function authDb() {
       "CREATE TABLE IF NOT EXISTS campaign_members (user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, table_id TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('owner','gm','player','spectator')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,table_id))",
       "CREATE INDEX IF NOT EXISTS idx_campaign_members_table ON campaign_members(table_id)",
       "CREATE TABLE IF NOT EXISTS user_release_reads (user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, version TEXT NOT NULL, read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,version))",
-      "CREATE TABLE IF NOT EXISTS auth_login_attempts (key TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0, blocked_until INTEGER NOT NULL DEFAULT 0, last_attempt INTEGER NOT NULL DEFAULT 0)"
+      "CREATE TABLE IF NOT EXISTS auth_login_attempts (key TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0, blocked_until INTEGER NOT NULL DEFAULT 0, last_attempt INTEGER NOT NULL DEFAULT 0)",
+      "CREATE TABLE IF NOT EXISTS auth_owner_activations (user_id TEXT PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE, token_hash TEXT UNIQUE NOT NULL, expires_at INTEGER NOT NULL)"
     ].join(";\n") + ";");
     globalThis.mesaAuthDb = db;
   }
@@ -144,7 +145,7 @@ export function markReleaseRead(userId: string, version: string) {
 
 
 /** Persistent coarse throttle for single-node deployment; hashes IP identifiers. */
-export function rateAllowed(category: "register" | "login", clientHint: string, limit: number, windowSeconds: number) {
+export function rateAllowed(category: "register" | "login" | "activation", clientHint: string, limit: number, windowSeconds: number) {
   const key = category + ":" + createHash("sha256").update(clientHint.slice(0, 255)).digest("hex");
   const db = authDb();
   const now = Math.floor(Date.now() / 1000);
@@ -156,4 +157,44 @@ export function rateAllowed(category: "register" | "login", clientHint: string, 
   db.prepare("INSERT INTO auth_login_attempts (key,failures,blocked_until,last_attempt) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET failures=excluded.failures,blocked_until=excluded.blocked_until,last_attempt=excluded.last_attempt")
     .run(key, count, blocked, now);
   return count <= limit;
+}
+
+/**
+ * Single-use owner activation. The hash is stored, not the secret token.
+ * This path is only reachable with a previously provisioned, unactivated account.
+ */
+export function activateOwner(token: string, newPassword: string): AppUser {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token) ||
+      typeof newPassword !== "string" || newPassword.length < 12 || newPassword.length > 128) {
+    throw new Error("Link inválido ou senha muito curta.");
+  }
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const db = authDb();
+  const now = Math.floor(Date.now() / 1000);
+  const passwordHash = hashPassword(newPassword);
+  const userId = db.transaction(() => {
+    const claim = db.prepare(
+      "SELECT a.user_id, a.expires_at, u.password_hash, u.legacy_owner FROM auth_owner_activations a JOIN auth_users u ON u.id = a.user_id WHERE a.token_hash = ?"
+    ).get(tokenHash) as {user_id:string;expires_at:number;password_hash:string|null;legacy_owner:number}|undefined;
+    if (!claim || claim.expires_at < now || claim.password_hash || claim.legacy_owner) {
+      throw new Error("O link de ativação é inválido, já foi utilizado ou expirou.");
+    }
+    const anotherOwner = db.prepare("SELECT id FROM auth_users WHERE legacy_owner = 1 AND id != ?").get(claim.user_id);
+    if (anotherOwner) throw new Error("Já existe um proprietário configurado neste servidor.");
+    const written = db.prepare(
+      "UPDATE auth_users SET password_hash = ?, legacy_owner = 1 WHERE id = ? AND password_hash IS NULL AND legacy_owner = 0"
+    ).run(passwordHash, claim.user_id);
+    if (written.changes !== 1) throw new Error("Não foi possível ativar a conta.");
+    db.prepare("DELETE FROM auth_owner_activations WHERE user_id = ?").run(claim.user_id);
+    const hasTables = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rpg_tables'").get();
+    if (hasTables) {
+      const tables = db.prepare("SELECT id FROM rpg_tables").all() as {id:string}[];
+      const insert = db.prepare("INSERT OR IGNORE INTO campaign_members (user_id,table_id,role) VALUES (?,?,'owner')");
+      for (const table of tables) insert.run(claim.user_id, table.id);
+    }
+    return claim.user_id;
+  })();
+  const user = userById(userId);
+  if (!user) throw new Error("Falha ao ativar o perfil.");
+  return user;
 }
