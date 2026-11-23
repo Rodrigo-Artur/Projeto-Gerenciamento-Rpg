@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { HomeHero } from "@/components/dashboard/HomeHero";
+import { AnimatedGroup } from "@/components/motion-primitives/animated-group";
 import { HomeItemButton, HomePanel, HomeStatCard } from "@/components/dashboard/HomePanels";
 import { homeFavorites, nextCalendarEvents, selectHomeSessions } from "@/components/dashboard/home-data";
 import type { HomeFavorite } from "@/components/dashboard/home-data";
@@ -155,14 +156,14 @@ export function HomeView({
         </HomePanel>
 
         <HomePanel icon={ShieldCheck} title="Acesso rápido" description="Ferramentas usadas durante a mestragem">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <AnimatedGroup preset="fade" className="grid gap-2 sm:grid-cols-2">
             <HomeItemButton icon={Users} title="Fichas" meta="Players e NPCs" onClick={() => onNavigate("sheets")} />
             <HomeItemButton icon={BookOpen} title="Regras" meta="Sistema atual" onClick={() => onNavigate("rules")} />
             <HomeItemButton icon={Swords} title="Combate" meta="Iniciativa e PV" onClick={onCombat} />
             <HomeItemButton icon={Map} title="Mundo" meta="Itens e locais" onClick={() => onNavigate("world")} />
             <HomeItemButton icon={Library} title="Biblioteca" meta="Conteúdo reutilizável" onClick={onLibrary} />
             <HomeItemButton icon={CalendarRange} title="Campanha" meta="Relações e calendário" onClick={() => onNavigate("campaign")} />
-          </div>
+          </AnimatedGroup>
         </HomePanel>
       </div>
 

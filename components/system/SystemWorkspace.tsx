@@ -544,7 +544,7 @@ export function SystemWorkspace() {
       {view === "templates" && <div className={contentHeight}><TemplatesView data={data} action={runAction} /></div>}
       {view === "world" && <div className={contentHeight}><WorldView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["item", "location", "faction", "quest", "timeline", "entity"].includes(activeEditableTab.type) ? focusId : undefined} /></div>}
       {view === "campaign" && <div className={contentHeight}><CampaignToolsView data={data} action={runAction} /></div>}
-      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} focusType={activeEditableTab?.type === "session" || activeEditableTab?.type === "note" ? activeEditableTab.type : undefined} /></div>}
+      {view === "sessions" && <div className={contentHeight}><SessionsView data={data} action={runAction} onOpened={opened} canEdit={editMode} focusId={activeEditableTab && ["session", "note"].includes(activeEditableTab.type) ? focusId : undefined} focusType={activeEditableTab?.type === "session" || activeEditableTab?.type === "note" ? activeEditableTab.type : undefined} /></div>}
       {view === "combat" && <div className={contentHeight}><CombatView data={data} action={runAction} /></div>}
       {view === "library" && <div className={contentHeight}><LibraryView data={data} action={runAction} focusId={activeEditableTab?.type === "library" ? focusId : undefined} /></div>}
       {view === "history" && <div className={`${contentHeight} overflow-y-auto`}><HistoryView data={data} action={runAction} /></div>}

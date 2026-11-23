@@ -1,27 +1,70 @@
 "use client";
 
-import { Eye, EyeOff, Link2, NotebookPen, Plus, Save, Star, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff, LayoutGrid, Link2, List, NotebookPen, Plus, Save, Star, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { useDebouncedAutosave } from "@/hooks/useDebouncedAutosave";
 import { WorkspaceEmpty } from "@/components/ui/workspace-empty";
 import { WorkspaceListEmpty } from "@/components/ui/workspace-feedback";
+import dynamic from "next/dynamic";
+
+const SessionKanbanBoard = dynamic(
+  () => import("@/components/system/SessionKanbanBoard").then((module) => module.SessionKanbanBoard),
+  { ssr: false, loading: () => <p role="status" className="p-5 text-sm text-muted-foreground">Preparando quadro de sessões...</p> }
+);
 import type { ContentRef, RulebookData, SessionPlan, TableNote } from "@/types/rulebook";
 
-export function SessionsView({ data, action, onOpened, focusId, focusType }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusId?: string; focusType?: "session" | "note" }) {
+export function SessionsView({ data, action, onOpened, focusId, focusType, canEdit = false }: { data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown>; onOpened: (type: string, id: string, name: string) => void; focusId?: string; focusType?: "session" | "note"; canEdit?: boolean }) {
   const focusedSession = focusType === "session" ? data.sessions.find((item) => item.id === focusId) : undefined;
   const focusedNote = focusType === "note" ? data.notes.find((item) => item.id === focusId) : undefined;
   const initialMode = focusedNote || (!focusedSession && !data.sessions.length && data.notes.length) ? "notes" : "sessions";
   const [mode, setMode] = useState<"sessions" | "notes">(initialMode);
   const [selectedId, setSelectedId] = useState(focusedSession?.id ?? focusedNote?.id ?? (initialMode === "sessions" ? data.sessions[0]?.id : data.notes[0]?.id) ?? "");
-  useEffect(() => { if (focusedSession) { setMode("sessions"); setSelectedId(focusedSession.id); } else if (focusedNote) { setMode("notes"); setSelectedId(focusedNote.id); } }, [focusedNote, focusedSession]);
+  const [boardOpen, setBoardOpen] = useState(false);
+  function openBoardSession(session: SessionPlan) {
+    setMode("sessions");
+    setSelectedId(session.id);
+    setBoardOpen(false);
+    onOpened("session", session.id, session.title);
+  }
+
+  async function updateSessionStatus(session: SessionPlan, status: NonNullable<SessionPlan["status"]>) {
+    if (!canEdit || (session.status ?? "planned") === status) return;
+    await action({
+      action: "upsert-session", tableId: data.activeTableId,
+      item: { ...session, status }, name: session.title,
+    });
+  }
+
+  const focusKey = focusedSession ? `session:${focusedSession.id}` : focusedNote ? `note:${focusedNote.id}` : "";
+  const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
+  // Adjust selection only when a new tab is focused, not after every payload refresh.
+  if (focusKey !== appliedFocusKey) {
+    setAppliedFocusKey(focusKey);
+    if (focusedSession) { setMode("sessions"); setSelectedId(focusedSession.id); }
+    else if (focusedNote) { setMode("notes"); setSelectedId(focusedNote.id); }
+  }
   const selectedSession = data.sessions.find((item) => item.id === selectedId);
   const selectedNote = data.notes.find((item) => item.id === selectedId);
 
   async function createSession() { const item: SessionPlan = { id: `session-${Date.now()}`, title: `Sessão ${data.sessions.length + 1}`, summary: "Objetivo principal da sessão.", scenes: ["Cena de abertura"], linkedRefs: [], linkedItems: [], notes: ["Gancho final"], status: "planned", sessionNumber: data.sessions.length + 1, visibility: "master" }; await action({ action: "upsert-session", tableId: data.activeTableId, item }); setMode("sessions"); setSelectedId(item.id); onOpened("session", item.id, item.title); }
   async function createNote() { const item: TableNote = { id: `note-${Date.now()}`, title: "Nova anotação", content: "Escreva pistas, segredos e pendências.", isPrivate: true, favorite: false, tags: [], visibility: "master" }; await action({ action: "upsert-note", tableId: data.activeTableId, item }); setMode("notes"); setSelectedId(item.id); onOpened("note", item.id, item.title); }
 
-  return <div className="mdm-module workspace-list-detail workspace-list-detail--330 grid h-full min-h-0 overflow-hidden"><aside className="mdm-list-pane mdm-scroll-area overflow-y-auto border-r border-border bg-card/60 p-4"><div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-1"><button onClick={() => { setMode("sessions"); const first = data.sessions[0]; if (first) { setSelectedId(first.id); onOpened("session", first.id, first.title); } else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${mode === "sessions" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Sessões</button><button onClick={() => { setMode("notes"); const first = data.notes[0]; if (first) { setSelectedId(first.id); onOpened("note", first.id, first.title); } else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${mode === "notes" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Notas</button></div><button onClick={() => void (mode === "sessions" ? createSession() : createNote())} className="secondary-button mt-3 w-full"><Plus className="h-3.5 w-3.5" />{mode === "sessions" ? "Preparar sessão" : "Nova nota"}</button><div className="mt-4 space-y-2">{(mode === "sessions" ? data.sessions.length : data.notes.length) === 0 && <WorkspaceListEmpty title={mode === "sessions" ? "Nenhuma sessão planejada" : "Nenhuma nota cadastrada"} description={mode === "sessions" ? "Ative a Edição para preparar a próxima sessão." : "Ative a Edição para registrar pistas e anotações."} />}{mode === "sessions" ? data.sessions.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("session", item.id, item.title); }} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selectedSession?.id === item.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}><p className="font-medium text-foreground">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.status ?? "planned"} • {item.summary}</p></button>) : data.notes.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("note", item.id, item.title); }} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selectedNote?.id === item.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}><div className="flex items-center justify-between"><p className="font-medium text-foreground">{item.title}</p>{item.favorite && <Star className="h-3.5 w-3.5 fill-primary text-primary" />}</div><p className="mt-1 text-xs text-muted-foreground">{item.isPrivate ? "Privada" : "Compartilhável"}</p></button>)}</div></aside><section className="mdm-detail-pane mdm-scroll-area overflow-y-auto p-6">{mode === "sessions" && selectedSession ? <SessionEditor key={selectedSession.id} item={selectedSession} data={data} action={action} /> : null}{mode === "notes" && selectedNote ? <NoteEditor key={selectedNote.id} item={selectedNote} data={data} action={action} /> : null}{mode === "sessions" && !selectedSession ? <Empty /> : null}{mode === "notes" && !selectedNote ? <Empty /> : null}</section></div>;
+  return <div className="mdm-module workspace-list-detail workspace-list-detail--330 grid h-full min-h-0 overflow-hidden"><aside className="mdm-list-pane mdm-scroll-area overflow-y-auto border-r border-border bg-card/60 p-4"><div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-1"><button onClick={() => { setMode("sessions"); const first = data.sessions[0]; if (first) { setSelectedId(first.id); onOpened("session", first.id, first.title); } else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${mode === "sessions" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Sessões</button><button onClick={() => { setMode("notes"); const first = data.notes[0]; if (first) { setSelectedId(first.id); onOpened("note", first.id, first.title); } else setSelectedId(""); }} className={`rounded-md px-3 py-2 text-sm ${mode === "notes" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Notas</button></div>{mode === "sessions" && <button
+        type="button"
+        aria-pressed={boardOpen}
+        onClick={() => setBoardOpen((previous) => !previous)}
+        className="secondary-button mt-3 w-full"
+      >{boardOpen ? <List className="size-4" /> : <LayoutGrid className="size-4" />}{boardOpen ? "Voltar ao editor" : "Quadro de sessões"}</button>}
+      <button onClick={() => void (mode === "sessions" ? createSession() : createNote())} className="secondary-button mt-3 w-full"><Plus className="h-3.5 w-3.5" />{mode === "sessions" ? "Preparar sessão" : "Nova nota"}</button><div className="mt-4 space-y-2">{(mode === "sessions" ? data.sessions.length : data.notes.length) === 0 && <WorkspaceListEmpty title={mode === "sessions" ? "Nenhuma sessão planejada" : "Nenhuma nota cadastrada"} description={mode === "sessions" ? "Ative a Edição para preparar a próxima sessão." : "Ative a Edição para registrar pistas e anotações."} />}{mode === "sessions" ? data.sessions.map((item) => <button key={item.id} onClick={() => { setBoardOpen(false); setSelectedId(item.id); onOpened("session", item.id, item.title); }} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selectedSession?.id === item.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}><p className="font-medium text-foreground">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.status ?? "planned"} • {item.summary}</p></button>) : data.notes.map((item) => <button key={item.id} onClick={() => { setSelectedId(item.id); onOpened("note", item.id, item.title); }} className={`mdm-list-entry w-full rounded-lg border p-3 text-left ${selectedNote?.id === item.id ? "border-primary/50 bg-primary/10" : "border-border bg-background"}`}><div className="flex items-center justify-between"><p className="font-medium text-foreground">{item.title}</p>{item.favorite && <Star className="h-3.5 w-3.5 fill-primary text-primary" />}</div><p className="mt-1 text-xs text-muted-foreground">{item.isPrivate ? "Privada" : "Compartilhável"}</p></button>)}</div></aside><section className="mdm-detail-pane mdm-scroll-area overflow-y-auto p-6">{mode === "sessions" && boardOpen ? (
+      <SessionKanbanBoard
+        key={data.activeTableId}
+        sessions={data.sessions}
+        canEdit={canEdit}
+        onOpen={openBoardSession}
+        onStatusChange={updateSessionStatus}
+      />
+    ) : mode === "sessions" && selectedSession ? <SessionEditor key={selectedSession.id} item={selectedSession} data={data} action={action} /> : null}{mode === "notes" && selectedNote ? <NoteEditor key={selectedNote.id} item={selectedNote} data={data} action={action} /> : null}{mode === "sessions" && !selectedSession && !boardOpen ? <Empty /> : null}{mode === "notes" && !selectedNote ? <Empty /> : null}</section></div>;
 }
 
 function SessionEditor({ item, data, action }: { item: SessionPlan; data: RulebookData; action: (payload: Record<string, unknown>) => Promise<unknown> }) {

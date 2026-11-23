@@ -11,6 +11,19 @@ export type AppRelease = {
 
 export const releases: AppRelease[] = [
   {
+    version: "6.0.1",
+    title: "Sessões em quadro e novos medidores",
+    status: "released",
+    date: "2026-11-23",
+    summary: "Primeira integração de Kibo UI, Gauge UI e Motion Primitives na experiência de mestragem.",
+    changes: [
+      { category: "new", text: "Visualização Kanban de sessões, com mudança de status por arrasto exclusivamente no Modo Edição." },
+      { category: "improvement", text: "Medidores de pontos de vida no combate, com cores para situações críticas." },
+      { category: "improvement", text: "Transições suaves nos atalhos da Home, respeitando a preferência por menos movimento." },
+      { category: "security", text: "Sem alterações nas permissões existentes ou no banco de dados das campanhas." },
+    ],
+  },
+  {
     version: "6.0.0-preview",
     title: "Contas e Central de Atualizações",
     status: "development",
