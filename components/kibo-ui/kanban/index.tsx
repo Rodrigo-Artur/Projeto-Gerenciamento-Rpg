@@ -212,6 +212,7 @@ export const KanbanProvider = <
   columns,
   data,
   onDataChange,
+  sensors: overrideSensors,
   ...props
 }: KanbanProviderProps<T, C>) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
@@ -318,7 +319,7 @@ export const KanbanProvider = <
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
         onDragStart={handleDragStart}
-        sensors={sensors}
+        sensors={overrideSensors ?? sensors}
         {...props}
       >
         <div
